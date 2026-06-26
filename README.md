@@ -1,59 +1,50 @@
-# Pedido Servicios — PWA de partes de campo
+# Pedido Servicios
 
-App offline-first para capturar partes de trabajo sin cobertura y volcarlos
-después al sistema. Hecha con HTML/CSS/JS, sin dependencias. Los datos se
-guardan en el dispositivo de cada usuario (localStorage); no hay servidor.
+App web **offline-first** para que un técnico de campo capture sus partes de
+trabajo aunque no tenga cobertura, y los vuelque después al sistema de gestión
+cuando recupera conexión.
 
-## Archivos
+Nace de una necesidad real de campo: sin red no se pueden registrar los partes
+en el momento, así que al recuperar cobertura toca rehacerlos de memoria. Esta
+herramienta los guarda en el propio dispositivo y los deja listos para volcar,
+sin perder ningún dato por el camino.
 
-- `index.html` — la app (todo en uno).
-- `manifest.json` — nombre, iconos y colores para poder instalarla.
-- `service-worker.js` — cachea la app para que arranque y funcione sin conexión.
+## Qué hace
+
+- **Captura de partes**: nº de pedido, máquina, cliente, horas del contador,
+  comentarios de resolución y defecto, productos imputados y horas de trabajo.
+- **Parte de trabajo (jornada)**: monta el timeline del día con todas las líneas
+  de horas, suma el total, detecta huecos y solapes entre tramos y permite
+  empalmarlos para cuadrar la jornada. Marca el restante para las 8 h y admite
+  una línea de comida (H.C).
+- **Copiado por casilla**: cada campo se copia por separado para volcarlo rápido.
+- **100% sin conexión** e **instalable** como app (PWA).
+- **Privacidad**: los datos viven solo en el dispositivo de cada usuario
+  (localStorage); no hay servidor ni se comparten entre personas.
+
+## Tecnología
+
+- HTML, CSS y JavaScript *vanilla*, sin frameworks ni dependencias.
+- PWA: Web App Manifest + Service Worker (estrategia *cache-first*) para que
+  arranque al instante y funcione offline.
+- Persistencia local con `localStorage`.
+
+## Uso
+
+Se abre una vez con conexión (para que se cachee) y a partir de ahí funciona sin
+red. Para instalarla en pantalla de inicio: en Android desde el menú del
+navegador, en iPhone con Compartir → Añadir a pantalla de inicio, y en
+escritorio desde el icono de instalar de la barra de direcciones.
+
+## Estructura
+
+- `index.html` — la aplicación completa (todo en uno).
+- `manifest.json` — metadatos e iconos para la instalación.
+- `service-worker.js` — caché para el funcionamiento offline.
 - `icon-192.png`, `icon-512.png`, `icon-512-maskable.png` — iconos.
 
-## Publicar en GitHub Pages (en una subcarpeta del dominio)
+## Despliegue
 
-La idea es dejarlo en `adrianzgzdev.com/partes/`. En el repositorio que ya
-sirve tu GitHub Pages:
-
-```bash
-# en la raíz del repo de tu Pages
-mkdir -p partes
-# copia aquí los 6 archivos de esta carpeta
-git add partes
-git commit -m "feat: add offline PWA for field work orders"
-git push
-```
-
-Espera 1–2 minutos a que GitHub Pages despliegue.
-
-### Requisitos para que la PWA funcione
-- Debe servirse por **HTTPS** (GitHub Pages ya lo hace). En Settings → Pages,
-  deja activado **Enforce HTTPS**.
-- Las rutas del manifest y del service worker son **relativas** (`./`), así que
-  funciona igual en `/partes/` que en cualquier otra subcarpeta.
-
-## Instalar en el móvil / portátil
-
-Abre `https://adrianzgzdev.com/partes/` una vez **con cobertura** (para que se
-cachee) y luego:
-
-- **Android (Chrome):** menú ⋮ → *Instalar aplicación* / *Añadir a pantalla de inicio*.
-- **iPhone (Safari):** Compartir → *Añadir a pantalla de inicio*.
-- **Escritorio (Chrome/Edge):** icono de instalar en la barra de direcciones.
-
-A partir de ahí abre desde el icono y funciona **sin conexión**.
-
-## Compartir con compañeros
-
-Pásales solo el enlace `https://adrianzgzdev.com/partes/`. Cada uno instala y
-sus datos quedan **solo en su dispositivo** (no se ven entre sí). El botón de
-exportar/backup lo podemos reactivar si queréis copia de seguridad.
-
-## Actualizar la app más adelante
-
-1. Edita `index.html` (u otros archivos).
-2. Sube la versión de la caché en `service-worker.js`: cambia
-   `pedido-servicios-v1` por `-v2`, `-v3`, etc.
-3. `git commit` + `git push`. Los usuarios reciben la versión nueva la próxima
-   vez que abran la app (puede requerir cerrarla y reabrirla una vez).
+Es un sitio totalmente estático: basta servir estos archivos en cualquier
+hosting estático con HTTPS. Las rutas son relativas, así que también funciona
+alojado en una subcarpeta.
