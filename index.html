@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pedido Servicios</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15191f">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Pedido Servicios">
+<style>
+  :root{
+    --bg:#f4f5f3;
+    --panel:#ffffff;
+    --ink:#1b1f24;
+    --ink-soft:#5b636e;
+    --line:#d9ddd6;
+    --line-strong:#b9c0b6;
+    --amber:#e8730c;
+    --amber-deep:#b85405;
+    --green:#1f7a4d;
+    --green-bg:#e3f3ea;
+    --amber-bg:#fcefe1;
+    --shadow:0 1px 0 rgba(0,0,0,.04), 0 6px 18px -10px rgba(0,0,0,.18);
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--sans);
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.45;
+    -webkit-text-size-adjust:100%;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  /* ---- Top bar ---- */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:#15191f;color:#fff;
+    padding:14px 16px;
+    display:flex;align-items:center;gap:12px;
+    box-shadow:0 2px 10px -4px rgba(0,0,0,.4);
+  }
+  header .mark{
+    font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.5px;
+    background:var(--amber);color:#15191f;padding:4px 8px;border-radius:5px;
+  }
+  header h1{font-size:16px;margin:0;font-weight:600;flex:1}
+  header .count{
+    font-family:var(--mono);font-size:13px;color:#15191f;
+    background:#ffd9b0;padding:4px 10px;border-radius:20px;font-weight:700;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:16px}
+  /* ---- Buttons ---- */
+  button{font-family:inherit;cursor:pointer;border:0}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:13px 16px;border-radius:10px;font-size:15px;font-weight:600;
+    background:var(--panel);color:var(--ink);border:1.5px solid var(--line-strong);
+    min-height:48px;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--amber);color:#fff;border-color:var(--amber-deep)}
+  .btn-ghost{background:transparent;border-color:transparent;color:var(--ink-soft)}
+  .btn-danger{color:#b3261e;border-color:#e7c3c0;background:#fbecea}
+  .btn-block{width:100%}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .toolbar .btn{flex:1;min-width:130px}
+  /* ---- Cards ---- */
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden;
+    display:flex;align-items:stretch;width:100%;
+  }
+  .card-tap{
+    flex:1;min-width:0;display:flex;align-items:center;gap:12px;
+    padding:14px 16px;background:none;border:0;text-align:left;font:inherit;cursor:pointer;color:inherit;
+  }
+  .card-tap:active{background:#f3f4f1}
+  .card-del{
+    flex-shrink:0;width:54px;border:0;border-left:1px solid var(--line);
+    background:#fbecea;color:#b3261e;font-size:18px;cursor:pointer;
+  }
+  .card-del:active{background:#f6dbd7}
+  .card .body{flex:1;min-width:0}
+  .card .ps{font-family:var(--mono);font-weight:700;font-size:15px}
+  .card .desc{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card .meta{font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin-top:2px}
+  .chev{color:var(--ink-soft);font-size:20px}
+  .badge{
+    font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;
+    white-space:nowrap;font-family:var(--mono);letter-spacing:.3px;
+  }
+  .badge.pend{background:var(--amber-bg);color:var(--amber-deep)}
+  .badge.done{background:var(--green-bg);color:var(--green)}
+  .empty{
+    text-align:center;color:var(--ink-soft);padding:54px 20px;
+    border:2px dashed var(--line-strong);border-radius:14px;
+  }
+  .empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+  /* ---- Form ---- */
+  .section{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);padding:16px;margin-bottom:14px;
+  }
+  .section > h2{
+    font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-soft);
+    margin:0 0 14px;font-weight:700;display:flex;align-items:center;gap:8px;
+  }
+  .section > h2::before{content:"";width:8px;height:8px;background:var(--amber);border-radius:2px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:0 0 5px}
+  .lbl-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 5px}
+  .lbl-row label{margin:0}
+  .copy-mini{
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:12px;font-weight:700;color:var(--amber-deep);
+    background:var(--amber-bg);border:1px solid #f2cba0;border-radius:7px;
+    padding:4px 9px;line-height:1;white-space:nowrap;
+  }
+  .copy-mini:active{transform:translateY(1px)}
+  input,textarea,select{
+    width:100%;font-family:var(--sans);font-size:16px;color:var(--ink);
+    padding:11px 12px;border:1.5px solid var(--line-strong);border-radius:9px;
+    background:#fcfdfb;
+  }
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber)}
+  input.mono,select.mono{font-family:var(--mono)}
+  textarea{resize:vertical;min-height:78px;line-height:1.5}
+  .field{margin-bottom:13px}
+  .field:last-child{margin-bottom:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  /* repeat rows */
+  .rrow{
+    border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:10px;
+    background:#fafbf9;position:relative;
+  }
+  .rrow .del{
+    position:absolute;top:7px;right:7px;background:#fff;border:1px solid var(--line-strong);
+    width:30px;height:30px;border-radius:8px;color:#b3261e;font-size:17px;line-height:1;
+  }
+  .calc{font-family:var(--mono);font-size:13px;color:var(--green);font-weight:700;margin-top:4px}
+  .add-row{margin-top:2px}
+  .hours-grid{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:9px}
+  .prod-grid{display:grid;grid-template-columns:1fr 2fr 80px;gap:9px}
+  @media(max-width:560px){
+    .hours-grid{grid-template-columns:1fr 1fr}
+    .prod-grid{grid-template-columns:1fr 1fr}
+  }
+  .sticky-actions{
+    position:sticky;bottom:0;background:linear-gradient(to top,var(--bg) 70%,transparent);
+    padding:12px 0 6px;display:flex;gap:10px;margin-top:6px;
+  }
+  .sticky-actions .btn{flex:1}
+  .detail-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .detail-head .ps{font-family:var(--mono);font-weight:700;font-size:20px;flex:1}
+  .row-line{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .row-line:last-child{border-bottom:0}
+  .row-line .k{color:var(--ink-soft)}
+  .row-line .v{font-family:var(--mono);text-align:right;font-weight:600}
+  /* ---- Timeline jornada ---- */
+  .daybar{display:flex;align-items:center;gap:10px;margin:6px 0 14px}
+  .daynav{background:#15191f;color:#fff;border-radius:10px;width:46px;height:46px;font-size:22px;display:flex;align-items:center;justify-content:center}
+  .dayname{flex:1;text-align:center;font-weight:700;font-size:15px;text-transform:capitalize}
+  .total{background:var(--green-bg);border:1px solid #bfe3cd;border-radius:12px;padding:14px 16px;text-align:center;margin-bottom:16px}
+  .total .big{font-family:var(--mono);font-size:30px;font-weight:700;color:var(--green);line-height:1.1}
+  .total .sub{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+  .total.zero{background:#fbe9e7;border-color:#f0c8c2}
+  .total.zero .big{color:#b3261e}
+  .seg{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .seg .tipo{font-family:var(--mono);font-weight:700;font-size:12px;padding:5px 8px;border-radius:6px;background:#eef0ec;color:#3a4048;white-space:nowrap}
+  .seg .tipo.hd{background:#e7eef7;color:#2c5d92}
+  .seg .tipo.hf{background:#eaf4ec;color:#2f7a4d}
+  .seg .info{flex:1;min-width:0}
+  .seg .ps{font-family:var(--mono);font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .seg .times{display:flex;align-items:center;gap:6px;margin-top:6px}
+  .seg .times input{width:66px;padding:8px 6px;text-align:center;font-size:15px;font-family:var(--mono)}
+  .seg .times .dash{color:var(--ink-soft)}
+  .seg .dur{font-family:var(--mono);font-weight:700;font-size:15px;white-space:nowrap}
+  .gap{display:flex;align-items:center;justify-content:center;gap:10px;padding:7px 0;font-size:12px;font-weight:700}
+  .gap.bad{color:var(--amber-deep)}
+  .gap.over{color:#b3261e}
+  .gap.ok{color:var(--green)}
+  .gap .fixbtn{background:#15191f;color:#fff;border-radius:7px;padding:6px 11px;font-size:12px;font-weight:700}
+  /* ---- Jornada objetivo ---- */
+  .jorn{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;margin-bottom:16px}
+  .jorn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--ink-soft)}
+  .jorn-row .dash{color:var(--ink-soft)}
+  .jorn-row input{width:66px;text-align:center;padding:8px 6px;font-family:var(--mono);font-size:15px;border:1.5px solid var(--line-strong);border-radius:9px;background:#fcfdfb}
+  .jorn-row input.comida{width:56px}
+  .jorn-row input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber)}
+  .jorn-res{margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-soft);font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rest{font-family:var(--mono);font-weight:700;padding:4px 11px;border-radius:20px;font-size:13px}
+  .rest.faltan{background:var(--amber-bg);color:var(--amber-deep)}
+  .rest.ok{background:var(--green-bg);color:var(--green)}
+  .rest.extra{background:#e7eef7;color:#2c5d92}
+  .total .rest-line{margin-top:10px}
+  .tl-actions{display:flex;gap:10px;margin-bottom:12px}
+  .tl-actions .btn{flex:1}
+  .tipo.hc{background:#fcefe1;color:#b85405}
+  .seg-c{background:#fffaf3}
+  .dur-c{color:#b85405}
+  .seg-del{flex-shrink:0;width:40px;border:0;background:none;color:#b3261e;font-size:16px;cursor:pointer}
+  /* ---- Modal ---- */
+  .modal-bg{position:fixed;inset:0;background:rgba(10,12,15,.55);display:none;align-items:center;justify-content:center;z-index:60;padding:24px}
+  .modal-bg.show{display:flex}
+  .modal{background:#fff;border-radius:14px;padding:20px;max-width:360px;width:100%;box-shadow:0 20px 50px -10px rgba(0,0,0,.45)}
+  .modal-msg{font-size:15px;font-weight:600;margin-bottom:18px;line-height:1.4}
+  .modal-actions{display:flex;gap:10px}
+  .modal-actions .btn{flex:1}
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:#15191f;color:#fff;padding:11px 18px;border-radius:24px;font-size:14px;
+    opacity:0;pointer-events:none;transition:.25s;z-index:50;font-weight:600;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hint{font-size:12px;color:var(--ink-soft);margin-top:8px}
+  .back{background:#15191f;color:#fff;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;cursor:pointer;margin-bottom:4px}
+  .back:active{transform:translateY(1px)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="mark">SAT</span>
+  <h1 id="topTitle">Pedido Servicios</h1>
+  <span class="count" id="topCount">0</span>
+</header>
+
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-msg" id="modalMsg"></div>
+    <div class="modal-actions">
+      <button class="btn" id="modalNo">Cancelar</button>
+      <button class="btn btn-danger" id="modalYes">Borrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Almacén local — todo vive en el navegador, sin internet.
+   ============================================================ */
+const KEY = 'partes_alquinta_v1';
+const TIPOS = ['H.D','H.F','H.C','KM','H.T','Otro'];   // H.D desplaz · H.F trabajo · H.C comida
+
+function load(){
+  try{ return JSON.parse(localStorage.getItem(KEY)) || []; }
+  catch(e){ return []; }
+}
+function save(list){ localStorage.setItem(KEY, JSON.stringify(list)); }
+
+let partes = load();
+
+/* líneas extra del día que no pertenecen a un PS (p. ej. la comida) */
+const EXTRAS_KEY = 'extras_v1';
+function loadExtras(){ try{ return JSON.parse(localStorage.getItem(EXTRAS_KEY))||[]; }catch(e){ return []; } }
+function saveExtras(){ localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras)); }
+function saveAll(){ save(partes); saveExtras(); }
+let extras = loadExtras();
+
+const META_MIN = 480; // 8 horas mínimas
+
+let view = {name:'list', id:null};
+
+/* ---------- utilidades ---------- */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function nowISO(){ return new Date().toISOString(); }
+function hoyISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtFecha(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'}) + ' ' +
+         d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtDia(ymd){
+  const [y,m,d]=ymd.split('-').map(Number);
+  return new Date(y,m-1,d).toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function diaDe(p){ return p.fecha || (p.creado||'').slice(0,10); }
+
+/* máscara: convierte lo tecleado en HH:MM mientras escribe (arregla el 08:55 -> 08:05) */
+function maskTimeInput(el){
+  let d = el.value.replace(/\D/g,'').slice(0,4);
+  el.value = (d.length >= 3) ? d.slice(0,2)+':'+d.slice(2) : d;
+}
+/* normaliza al salir: "855"->08:55, "8"->08:00, "1830"->18:30 */
+function normHora(s){
+  if(!s) return '';
+  s = s.toString().trim();
+  let h, m;
+  if(s.includes(':')){ const [a,b]=s.split(':'); h=parseInt(a,10); m=parseInt(b||'0',10); }
+  else{
+    const d = s.replace(/\D/g,'');
+    if(!d) return '';
+    if(d.length<=2){ h=parseInt(d,10); m=0; }
+    else if(d.length===3){ h=parseInt(d.slice(0,1),10); m=parseInt(d.slice(1),10); }
+    else { h=parseInt(d.slice(0,2),10); m=parseInt(d.slice(2,4),10); }
+  }
+  if(isNaN(h)) return '';
+  if(isNaN(m)) m=0;
+  if(h>23 || m>59) return s;           // inválida: la dejamos para que se vea el error
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+function aMin(hhmm){ const n=normHora(hhmm); if(!n) return null; const [h,m]=n.split(':').map(Number); return h*60+m; }
+function deMin(min){ min=((min%1440)+1440)%1440; return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
+function horasDecimales(ini, fin){
+  const a=aMin(ini), b=aMin(fin);
+  if(a===null || b===null) return '';
+  let mins = b - a;
+  if(mins < 0) mins += 1440;           // cruza medianoche
+  return (mins/60).toFixed(2);
+}
+function nuevaParte(){
+  return {
+    id:uid(), creado:nowISO(), fecha:hoyISO(), volcado:false,
+    ps:'PS26/', serie:'', cliente:'', descripcion:'',
+    horasMaquina:'', comentarioResolucion:'', comentarioDefecto:'',
+    productos:[], horas:[]
+  };
+}
+function getParte(id){ return partes.find(p=>p.id===id); }
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove('show'),1900);
+}
+
+/* ---------- confirmación propia (no usa confirm() del navegador) ---------- */
+function confirmar(msg, onYes, yesLabel){
+  const bg=document.getElementById('modalBg');
+  document.getElementById('modalMsg').textContent = msg;
+  const yes=document.getElementById('modalYes'), no=document.getElementById('modalNo');
+  yes.textContent = yesLabel || 'Borrar';
+  bg.classList.add('show');
+  const close=()=>{ bg.classList.remove('show'); yes.onclick=no.onclick=bg.onclick=null; };
+  yes.onclick=()=>{ close(); onYes(); };
+  no.onclick=close;
+  bg.onclick=(e)=>{ if(e.target===bg) close(); };
+}
+
+/* ---------- comida y restante ---------- */
+function fmtHM(min){ min=Math.abs(Math.round(min)); return Math.floor(min/60)+'h '+(min%60)+'m'; }
+function addComida(){
+  extras.push({id:uid(), fecha:view.fecha, tipo:'H.C', ini:'', fin:''});
+  saveExtras(); renderTimeline(); toast('Línea de comida añadida');
+}
+function delExtra(id){ extras=extras.filter(e=>e.id!==id); saveExtras(); renderTimeline(); }
+
+/* ---------- persistir el formulario en edición ---------- */
+function bind(el, parte, prop){
+  el.value = parte[prop] ?? '';
+  el.addEventListener('input', ()=>{ parte[prop] = el.value; save(partes); });
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+const app = document.getElementById('app');
+
+function render(){
+  const pend = partes.filter(p=>!p.volcado).length;
+  document.getElementById('topCount').textContent = pend;
+  if(view.name === 'list') renderList();
+  else if(view.name === 'timeline') renderTimeline();
+  else renderForm(getParte(view.id));
+}
+
+/* ---------- Lista ---------- */
+function renderList(){
+  document.getElementById('topTitle').textContent = 'Pedido Servicios';
+  let html = `
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
+      <button class="btn" onclick="verJornada()">Parte de trabajo</button>
+    </div>`;
+
+  if(partes.length === 0){
+    html += `<div class="empty"><strong>Aún no hay partes</strong>
+      Pulsa <b>Nuevo parte</b> al empezar una reparación y vas rellenando sobre la marcha, aunque no tengas cobertura.</div>`;
+  }else{
+    const ordenadas = [...partes].sort((a,b)=> (a.volcado-b.volcado) || (b.creado.localeCompare(a.creado)));
+    html += ordenadas.map(p=>`
+      <div class="card">
+        <button class="card-tap" onclick="abrir('${p.id}')">
+          <div class="body">
+            <div class="ps">${esc(p.ps) || 'Sin nº PS'}</div>
+            <div class="desc">${esc(p.descripcion) || '—'}</div>
+            <div class="meta">${esc(p.serie)?'Serie '+esc(p.serie)+' · ':''}${fmtFecha(p.creado)}</div>
+          </div>
+          <span class="badge ${p.volcado?'done':'pend'}">${p.volcado?'VOLCADO':'PENDIENTE'}</span>
+          <span class="chev">›</span>
+        </button>
+        <button class="card-del" onclick="borrar('${p.id}')" title="Borrar parte">🗑</button>
+      </div>`).join('');
+  }
+  app.innerHTML = html;
+}
+
+/* ---------- Parte de trabajo (jornada / timeline) ---------- */
+function verJornada(){ view = {name:'timeline', fecha: (view.fecha || hoyISO())}; render(); }
+function cambiarDia(delta){
+  const [y,m,d] = view.fecha.split('-').map(Number);
+  const dt = new Date(y,m-1,d); dt.setDate(dt.getDate()+delta);
+  view.fecha = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+  render();
+}
+let _segRefs = [];   // referencias a las líneas mostradas, por índice
+function segmentosDe(fecha){
+  const segs=[];
+  partes.forEach(p=>{
+    if(diaDe(p)!==fecha) return;
+    p.horas.forEach(h=>{
+      if(h.tipo==='KM') return;
+      const a=aMin(h.ini), b=aMin(h.fin);
+      if(a===null||b===null) return;
+      let dur=b-a; if(dur<0) dur+=1440;
+      segs.push({ref:h, ps:p.ps, tipo:h.tipo, ini:normHora(h.ini), fin:normHora(h.fin), a, b, dur});
+    });
+  });
+  extras.forEach(e=>{
+    if(e.fecha!==fecha) return;
+    const a=aMin(e.ini), b=aMin(e.fin);
+    if(a===null||b===null){
+      segs.push({ref:e, ps:'Comida', tipo:e.tipo, ini:e.ini||'', fin:e.fin||'', a:99999, b:null, dur:0, incompleta:true});
+      return;
+    }
+    let dur=b-a; if(dur<0) dur+=1440;
+    segs.push({ref:e, ps:'Comida', tipo:e.tipo, ini:normHora(e.ini), fin:normHora(e.fin), a, b, dur});
+  });
+  segs.sort((x,y)=> x.a - y.a);
+  return segs;
+}
+function kmDe(fecha){
+  let km=0;
+  partes.forEach(p=>{ if(diaDe(p)!==fecha) return; p.horas.forEach(h=>{ if(h.tipo==='KM'){ const n=parseFloat((h.cant||'').toString().replace(',','.')); if(!isNaN(n)) km+=n; } }); });
+  return km;
+}
+function totalCardHTML(trabajoMin, comidaMin, km){
+  const totalMin = trabajoMin;                 // la comida NO se resta: solo informa
+  const rest = META_MIN - totalMin;
+  let restHTML;
+  if(rest>0) restHTML = `<span class="rest faltan">Faltan ${fmtHM(rest)} para las 8 h</span>`;
+  else if(rest===0) restHTML = `<span class="rest ok">8 h cumplidas ✓</span>`;
+  else restHTML = `<span class="rest ok">8 h cumplidas ✓</span> <span class="rest extra">+${fmtHM(rest)}</span>`;
+  return `<div class="big">${(totalMin/60).toFixed(2).replace('.',',')} h</div>
+      <div class="sub">Total trabajado · ${deMin(totalMin)}${comidaMin?` · comida ${deMin(comidaMin)}`:''}${km?` · ${km} km`:''}</div>
+      <div class="rest-line">${restHTML}</div>`;
+}
+function renderTimeline(){
+  document.getElementById('topTitle').textContent = 'Parte de trabajo';
+  const fecha = view.fecha;
+  const segs = segmentosDe(fecha);
+  _segRefs = segs.map(s=>s.ref);
+
+  const trabajoMin = segs.filter(s=>s.tipo!=='H.C').reduce((a,s)=>a+s.dur,0);
+  const comidaMin  = segs.filter(s=>s.tipo==='H.C').reduce((a,s)=>a+s.dur,0);
+
+  let html = `<button class="back" onclick="volver()">‹ Pedidos</button>
+    <div class="daybar">
+      <button class="daynav" tabindex="-1" onclick="cambiarDia(-1)">‹</button>
+      <div class="dayname">${fmtDia(fecha)}</div>
+      <button class="daynav" tabindex="-1" onclick="cambiarDia(1)">›</button>
+    </div>
+    <div class="total ${trabajoMin===0?'zero':''}" id="totalCard">${totalCardHTML(trabajoMin, comidaMin, kmDe(fecha))}</div>
+    <div class="tl-actions">
+      <button class="btn" onclick="addComida()">+ Comida (H.C)</button>
+      <button class="btn" onclick="empalmarTodo()">⛓ Empalmar todo</button>
+    </div>`;
+
+  if(segs.length===0){
+    html += `<div class="empty"><strong>Sin horas este día</strong>
+      Añade líneas H.D / H.F dentro de cada parte y aquí verás la jornada montada para cuadrar los empalmes.</div>`;
+    app.innerHTML = html; return;
+  }
+
+  segs.forEach((s,idx)=>{
+    const isC = s.tipo==='H.C';
+    const cls = s.tipo==='H.D'?'hd':(s.tipo==='H.F'?'hf':(isC?'hc':''));
+    const durTxt = s.incompleta ? '—' : `${(s.dur/60).toFixed(2).replace('.',',')} h`;
+    html += `<div class="seg${isC?' seg-c':''}">
+      <span class="tipo ${cls}">${s.tipo}</span>
+      <div class="info">
+        <div class="ps">${isC?'Comida':(esc(s.ps)||'Sin PS')}</div>
+        <div class="times">
+          <input class="mono" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.ini)}" oninput="onSegInput(${idx},'ini',this)" onblur="onSegBlur(${idx},'ini',this)">
+          <span class="dash">–</span>
+          <input class="mono" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.fin)}" oninput="onSegInput(${idx},'fin',this)" onblur="onSegBlur(${idx},'fin',this)">
+        </div>
+      </div>
+      <span class="dur${isC?' dur-c':''}" id="dur_${idx}">${durTxt}</span>
+      ${isC?`<button class="seg-del" tabindex="-1" onclick="delExtra('${s.ref.id}')" title="Quitar comida">🗑</button>`:''}
+    </div>
+    <div class="gap" id="gap_${idx}"></div>`;
+  });
+
+  app.innerHTML = html;
+  refreshReadouts();
+}
+/* recalcula totales, duraciones y huecos SIN rehacer los inputs (conserva el foco para Tab) */
+function refreshReadouts(){
+  let trabajoMin=0, comidaMin=0;
+  const info = _segRefs.map(ref=>{
+    const a=aMin(ref.ini), b=aMin(ref.fin);
+    if(ref.tipo==='KM' || a===null || b===null) return {dur:null, a, b, tipo:ref.tipo, fin:normHora(ref.fin)};
+    let dur=b-a; if(dur<0) dur+=1440;
+    if(ref.tipo==='H.C') comidaMin+=dur; else trabajoMin+=dur;
+    return {dur, a, b, tipo:ref.tipo, fin:normHora(ref.fin)};
+  });
+  const tc=document.getElementById('totalCard');
+  if(tc){ tc.className='total'+(trabajoMin===0?' zero':''); tc.innerHTML=totalCardHTML(trabajoMin, comidaMin, kmDe(view.fecha)); }
+  info.forEach((d,idx)=>{
+    const de=document.getElementById('dur_'+idx);
+    if(de){ de.textContent = d.dur===null ? '—' : `${(d.dur/60).toFixed(2).replace('.',',')} h`; de.className='dur'+(d.tipo==='H.C'?' dur-c':''); }
+    const ge=document.getElementById('gap_'+idx);
+    if(!ge) return;
+    const nx=info[idx+1];
+    if(!nx || d.a===null || d.b===null || nx.a===null){ ge.className='gap'; ge.innerHTML=''; return; }
+    const gap = nx.a - d.b;
+    if(gap>0){ ge.className='gap bad'; ge.innerHTML=`▲ Hueco de ${gap} min · no se paga <button class="fixbtn" tabindex="-1" onclick="empalmar(${idx+1},'${d.fin}')">Empalmar</button>`; }
+    else if(gap<0){ ge.className='gap over'; ge.innerHTML=`▲ Solape de ${-gap} min <button class="fixbtn" tabindex="-1" onclick="empalmar(${idx+1},'${d.fin}')">Corregir</button>`; }
+    else { ge.className='gap ok'; ge.innerHTML='✓ empalma'; }
+  });
+}
+function onSegInput(idx,k,el){
+  maskTimeInput(el);
+  const h=_segRefs[idx]; h[k]=el.value;
+  if('cant' in h){ const a=horasDecimales(h.ini,h.fin); if(a) h.cant=a; }
+  saveAll(); refreshReadouts();
+}
+function onSegBlur(idx,k,el){
+  el.value=normHora(el.value);
+  const h=_segRefs[idx]; h[k]=el.value;
+  if('cant' in h){ const a=horasDecimales(h.ini,h.fin); if(a) h.cant=a; }
+  saveAll(); refreshReadouts();   // sin re-render: Tab pasa al siguiente campo
+}
+function empalmar(idx,hhmm){
+  const h=_segRefs[idx]; h.ini=hhmm;
+  if('cant' in h){ const a=horasDecimales(h.ini,h.fin); if(a) h.cant=a; }
+  saveAll(); renderTimeline(); toast('Empalmado');
+}
+function empalmarTodo(){
+  const segs = segmentosDe(view.fecha);
+  for(let i=1;i<segs.length;i++){
+    const prev=segs[i-1].ref, cur=segs[i].ref;
+    if(!normHora(prev.fin)) continue;
+    cur.ini = normHora(prev.fin);
+    if('cant' in cur){ const a=horasDecimales(cur.ini,cur.fin); if(a) cur.cant=a; }
+  }
+  saveAll(); renderTimeline(); toast('Jornada empalmada');
+}
+
+/* ---------- Formulario / detalle ---------- */
+function renderForm(p){
+  if(!p){ view={name:'list'}; return render(); }
+  document.getElementById('topTitle').textContent = p.ps || 'Nuevo parte';
+
+  app.innerHTML = `
+    <button class="back" onclick="volver()">‹ Pedidos</button>
+
+    <div class="section" style="margin-top:12px">
+      <h2>Identificación</h2>
+      <div class="field"><label>Nº Pedido de Servicio</label><input id="f_ps" class="mono"></div>
+      <div class="grid2">
+        <div class="field"><label>Nº serie máquina</label><input id="f_serie" class="mono"></div>
+        <div class="field"><label>Cliente</label><input id="f_cliente"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Descripción</label><input id="f_desc"></div>
+        <div class="field"><label>Fecha de jornada</label><input id="f_fecha" type="date"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Horas de la máquina</h2>
+      <div class="field"><div class="lbl-row"><label>Horas leídas en el contador</label><button class="copy-mini" tabindex="-1" onclick="copyVal('f_horasMaq','Horas máquina copiadas')">⧉ Copiar</button></div><input id="f_horasMaq" class="mono" inputmode="decimal"></div>
+    </div>
+
+    <div class="section">
+      <h2>Comentarios</h2>
+      <div class="field"><div class="lbl-row"><label>Comentario de resolución</label><button class="copy-mini" tabindex="-1" onclick="copyVal('f_res','Resolución copiada')">⧉ Copiar</button></div><textarea id="f_res"></textarea></div>
+      <div class="field"><div class="lbl-row"><label>Comentario de defecto (opcional)</label><button class="copy-mini" tabindex="-1" onclick="copyVal('f_def','Defecto copiado')">⧉ Copiar</button></div><textarea id="f_def"></textarea></div>
+    </div>
+
+    <div class="section">
+      <h2>Productos imputados</h2>
+      <div id="prodList"></div>
+      <button class="btn btn-block add-row" onclick="addProd()">+ Añadir producto</button>
+    </div>
+
+    <div class="section">
+      <h2>Horas de trabajo</h2>
+      <div id="horasList"></div>
+      <button class="btn btn-block add-row" onclick="addHora()">+ Añadir línea</button>
+      <p class="hint">H.D = hora de desplazamiento · H.F = hora de trabajo. En H.D / H.F / H.T pon inicio y fin y se calcula solo. En KM escribe directamente la cantidad.</p>
+    </div>
+
+    <div class="section">
+      <button class="btn btn-block ${p.volcado?'':'btn-primary'}" onclick="toggleVolcado('${p.id}')" style="${p.volcado?'':''}">
+        ${p.volcado ? '↺ Marcar como pendiente' : '✓ Marcar como volcado'}
+      </button>
+      <button class="btn btn-block" style="margin-top:10px" onclick="copiar('${p.id}')">⧉ Copiar resumen del parte</button>
+    </div>
+
+    <div class="sticky-actions">
+      <button class="btn btn-danger" onclick="borrar('${p.id}')">Borrar</button>
+      <button class="btn btn-primary" style="flex:2" onclick="volver()">Hecho</button>
+    </div>
+  `;
+
+  bind(document.getElementById('f_ps'), p, 'ps');
+  bind(document.getElementById('f_serie'), p, 'serie');
+  bind(document.getElementById('f_cliente'), p, 'cliente');
+  bind(document.getElementById('f_desc'), p, 'descripcion');
+  if(!p.fecha) p.fecha = diaDe(p);
+  bind(document.getElementById('f_fecha'), p, 'fecha');
+  bind(document.getElementById('f_horasMaq'), p, 'horasMaquina');
+  bind(document.getElementById('f_res'), p, 'comentarioResolucion');
+  bind(document.getElementById('f_def'), p, 'comentarioDefecto');
+  document.getElementById('f_ps').addEventListener('input', ()=>{ document.getElementById('topTitle').textContent = p.ps || 'Nuevo parte'; });
+
+  renderProductos(p);
+  renderHoras(p);
+}
+
+function renderProductos(p){
+  const c = document.getElementById('prodList');
+  c.innerHTML = p.productos.map((pr,i)=>`
+    <div class="rrow">
+      <button class="del" tabindex="-1" onclick="delProd('${p.id}',${i})">×</button>
+      <div class="prod-grid">
+        <div><label>Referencia / Nº</label><input class="mono" value="${esc(pr.ref)}" oninput="updProd('${p.id}',${i},'ref',this.value)"></div>
+        <div><div class="lbl-row"><label>Descripción</label><button class="copy-mini" tabindex="-1" onclick="copyProdDesc('${p.id}',${i})">⧉</button></div><input value="${esc(pr.desc)}" oninput="updProd('${p.id}',${i},'desc',this.value)"></div>
+        <div><label>Cant.</label><input class="mono" inputmode="decimal" value="${esc(pr.cant)}" oninput="updProd('${p.id}',${i},'cant',this.value)"></div>
+      </div>
+    </div>`).join('') || '<p class="hint" style="margin:0 0 10px">Ningún producto añadido.</p>';
+}
+
+function renderHoras(p){
+  const c = document.getElementById('horasList');
+  c.innerHTML = p.horas.map((h,i)=>{
+    return `
+    <div class="rrow">
+      <button class="del" tabindex="-1" onclick="delHora('${p.id}',${i})">×</button>
+      <div class="hours-grid">
+        <div><label>Tipo</label>
+          <select class="mono" onchange="updHora('${p.id}',${i},'tipo',this.value)">
+            ${TIPOS.map(t=>`<option ${t===h.tipo?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div><label>Inicio</label><input type="text" inputmode="numeric" maxlength="5" class="mono" value="${esc(h.ini)}" placeholder="HH:MM" ${h.tipo==='KM'?'disabled':''} oninput="onTimeInput('${p.id}',${i},'ini',this)" onblur="onTimeBlur('${p.id}',${i},'ini',this)"></div>
+        <div><label>Fin</label><input type="text" inputmode="numeric" maxlength="5" class="mono" value="${esc(h.fin)}" placeholder="HH:MM" ${h.tipo==='KM'?'disabled':''} oninput="onTimeInput('${p.id}',${i},'fin',this)" onblur="onTimeBlur('${p.id}',${i},'fin',this)"></div>
+        <div><label>${h.tipo==='KM'?'KM':'Cantidad'}</label><input id="h_cant_${i}" class="mono" inputmode="decimal" value="${esc(h.cant)}" oninput="updHora('${p.id}',${i},'cant',this.value)"></div>
+      </div>
+    </div>`;
+  }).join('') || '<p class="hint" style="margin:0 0 10px">Ninguna línea añadida.</p>';
+}
+
+/* ============================================================
+   ACCIONES
+   ============================================================ */
+function crear(){
+  const p = nuevaParte();
+  partes.push(p); save(partes);
+  view = {name:'form', id:p.id}; render();
+}
+function abrir(id){ view = {name:'form', id}; render(); }
+function volver(){ view = {name:'list'}; render(); }
+
+function addProd(){ const p=getParte(view.id); p.productos.push({ref:'',desc:'',cant:''}); save(partes); renderProductos(p); }
+function updProd(id,i,k,v){ const p=getParte(id); p.productos[i][k]=v; save(partes); }
+function delProd(id,i){ const p=getParte(id); p.productos.splice(i,1); save(partes); renderProductos(p); }
+
+function addHora(){ const p=getParte(view.id); p.horas.push({tipo:'H.D',ini:'',fin:'',cant:''}); save(partes); renderHoras(p); }
+function updHora(id,i,k,v){
+  const p=getParte(id); p.horas[i][k]=v; save(partes);
+  if(k==='tipo') renderHoras(p);   // solo re-render al cambiar el tipo (KM activa/desactiva horas)
+}
+/* tiempo: aplica máscara y recalcula la cantidad en vivo, SIN re-render (no se pierde el foco) */
+function onTimeInput(id,i,k,el){
+  maskTimeInput(el);
+  const p=getParte(id), h=p.horas[i]; h[k]=el.value;
+  if(h.tipo!=='KM'){
+    const a=horasDecimales(h.ini,h.fin);
+    if(a){ h.cant=a; const c=document.getElementById('h_cant_'+i); if(c) c.value=a; }
+  }
+  save(partes);
+}
+function onTimeBlur(id,i,k,el){
+  el.value = normHora(el.value);
+  const p=getParte(id), h=p.horas[i]; h[k]=el.value;
+  if(h.tipo!=='KM'){ const a=horasDecimales(h.ini,h.fin); if(a){ h.cant=a; const c=document.getElementById('h_cant_'+i); if(c) c.value=a; } }
+  save(partes);   // sin re-render: Tab pasa al siguiente campo
+}
+function aplicarCalc(id,i){ const p=getParte(id); const h=p.horas[i]; h.cant=horasDecimales(h.ini,h.fin); save(partes); renderHoras(p); }
+function delHora(id,i){ const p=getParte(id); p.horas.splice(i,1); save(partes); renderHoras(p); }
+
+function toggleVolcado(id){ const p=getParte(id); p.volcado=!p.volcado; save(partes); render(); toast(p.volcado?'Marcado como volcado':'Marcado como pendiente'); }
+
+function borrar(id){
+  confirmar('¿Borrar este parte? No se puede deshacer.', ()=>{
+    partes = partes.filter(p=>p.id!==id); save(partes);
+    view={name:'list'}; render(); toast('Parte borrado');
+  });
+}
+
+/* ---------- copiar resumen completo del parte ---------- */
+function copiar(id){
+  const p = getParte(id);
+  let t = `PS: ${p.ps}\nSerie: ${p.serie}\nCliente: ${p.cliente}\nDescripción: ${p.descripcion}\n`;
+  t += `\nHoras máquina (contador): ${p.horasMaquina}\n`;
+  t += `\nComentario resolución:\n${p.comentarioResolucion}\n`;
+  if(p.comentarioDefecto) t += `\nComentario defecto:\n${p.comentarioDefecto}\n`;
+  t += `\nProductos imputados:\n`;
+  t += p.productos.length ? p.productos.map(pr=>`  - ${pr.ref}  ${pr.desc}  x${pr.cant}`).join('\n') : '  (ninguno)';
+  t += `\n\nHoras de trabajo:\n`;
+  t += p.horas.length ? p.horas.map(h=>{
+        const tramo = (h.tipo!=='KM' && h.ini && h.fin) ? ` (${h.ini}-${h.fin})` : '';
+        return `  - ${h.tipo}: ${h.cant}${tramo}`;
+      }).join('\n') : '  (ninguna)';
+  copiarTexto(t, 'Resumen copiado');
+}
+/* ---------- copiar una casilla individual ---------- */
+function copyVal(id, msg){ const el=document.getElementById(id); copiarTexto(el ? el.value : '', msg || 'Copiado'); }
+function copyProdDesc(id,i){ const p=getParte(id); copiarTexto((p.productos[i]||{}).desc || '', 'Descripción copiada'); }
+
+function copiarTexto(t, msg){
+  msg = msg || 'Copiado';
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(()=>toast(msg)).catch(()=>fallbackCopy(t,msg));
+  } else fallbackCopy(t,msg);
+}
+function fallbackCopy(t,msg){
+  const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
+  ta.select(); try{document.execCommand('copy');toast(msg||'Copiado');}catch(e){toast('Cópialo a mano');}
+  document.body.removeChild(ta);
+}
+
+/* ---------- exportar / importar copia de seguridad ---------- */
+function exportar(){
+  const blob = new Blob([JSON.stringify(partes,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'partes-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Copia exportada');
+}
+function importar(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=()=>{
+    const f=inp.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const data=JSON.parse(r.result);
+        if(!Array.isArray(data)) throw 0;
+        const ids=new Set(partes.map(p=>p.id));
+        data.forEach(p=>{ if(!ids.has(p.id)) partes.push(p); });
+        save(partes); render(); toast('Importado');
+      }catch(e){ alert('Archivo no válido.'); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+function esc(s){ return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+render();
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
