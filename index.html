@@ -220,6 +220,9 @@
   .hint{font-size:12px;color:var(--ink-soft);margin-top:8px}
   .back{background:#15191f;color:#fff;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;cursor:pointer;margin-bottom:4px}
   .back:active{transform:translateY(1px)}
+  .sync-info{font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin:-4px 0 14px;padding-left:2px}
+  .sync-info.ok{color:var(--green)}
+  .sync-info.err{color:var(--amber-deep)}
 </style>
 </head>
 <body>
@@ -247,14 +250,41 @@
 /* ============================================================
    Almacén local — todo vive en el navegador, sin internet.
    ============================================================ */
-const KEY = 'partes_alquinta_v1';
+const KEY = 'partes_v1';                    // clave actual (nombre neutro)
+const KEY_ANTIGUA = 'partes_alquinta_v1';   // clave antigua — solo para migrar datos ya guardados
+
+/* Migración: si hay datos bajo la clave antigua y aún no bajo la nueva, los copiamos.
+   La antigua se conserva como respaldo. Corre una sola vez: al existir ya la nueva, no repite. */
+function migrarClave(){
+  try{
+    const yaEnNueva = localStorage.getItem(KEY);
+    const enAntigua = localStorage.getItem(KEY_ANTIGUA);
+    if(enAntigua !== null && yaEnNueva === null){
+      localStorage.setItem(KEY, enAntigua);
+    }
+  }catch(e){}
+}
+migrarClave();
 const TIPOS = ['H.D','H.F','H.C','KM','H.T','Otro'];   // H.D desplaz · H.F trabajo · H.C comida
 
 function load(){
-  try{ return JSON.parse(localStorage.getItem(KEY)) || []; }
-  catch(e){ return []; }
+  try{
+    const list = JSON.parse(localStorage.getItem(KEY)) || [];
+    let cambiado = false;
+    list.forEach(p=>{
+      if(p.actualizado === undefined){ p.actualizado = p.creado || nowISO(); cambiado = true; }
+      if(p.borrado === undefined){ p.borrado = false; cambiado = true; }
+    });
+    if(cambiado) save(list);
+    return list;
+  }catch(e){ return []; }
 }
 function save(list){ localStorage.setItem(KEY, JSON.stringify(list)); }
+
+/* marca un parte como "editado ahora" (para el sync) */
+function tocar(p){ if(p) p.actualizado = nowISO(); }
+/* guarda marcando la hora del parte tocado — usar en vez de save() al editar un parte */
+function guardar(p){ tocar(p); save(partes); }
 
 let partes = load();
 
@@ -317,14 +347,18 @@ function horasDecimales(ini, fin){
   return (mins/60).toFixed(2);
 }
 function nuevaParte(){
+  const t = nowISO();
   return {
-    id:uid(), creado:nowISO(), fecha:hoyISO(), volcado:false,
+    id:uid(), creado:t, actualizado:t, borrado:false,
+    fecha:hoyISO(), volcado:false,
     ps:'PS26/', serie:'', cliente:'', descripcion:'',
     horasMaquina:'', comentarioResolucion:'', comentarioDefecto:'',
     productos:[], horas:[]
   };
 }
 function getParte(id){ return partes.find(p=>p.id===id); }
+/* los partes que se muestran: todos menos los borrados (lógicamente) */
+function partesVivos(){ return partes.filter(p=>!p.borrado); }
 
 function toast(msg){
   const t = document.getElementById('toast');
@@ -356,7 +390,7 @@ function delExtra(id){ extras=extras.filter(e=>e.id!==id); saveExtras(); renderT
 /* ---------- persistir el formulario en edición ---------- */
 function bind(el, parte, prop){
   el.value = parte[prop] ?? '';
-  el.addEventListener('input', ()=>{ parte[prop] = el.value; save(partes); });
+  el.addEventListener('input', ()=>{ parte[prop] = el.value; guardar(parte); });
 }
 
 /* ============================================================
@@ -365,7 +399,7 @@ function bind(el, parte, prop){
 const app = document.getElementById('app');
 
 function render(){
-  const pend = partes.filter(p=>!p.volcado).length;
+  const pend = partesVivos().filter(p=>!p.volcado).length;
   document.getElementById('topCount').textContent = pend;
   if(view.name === 'list') renderList();
   else if(view.name === 'timeline') renderTimeline();
@@ -379,13 +413,16 @@ function renderList(){
     <div class="toolbar">
       <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
       <button class="btn" onclick="verJornada()">Parte de trabajo</button>
-    </div>`;
+      <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
+    </div>
+    <div id="syncEstado" class="sync-info"></div>`;
 
-  if(partes.length === 0){
+  const vivos = partesVivos();
+  if(vivos.length === 0){
     html += `<div class="empty"><strong>Aún no hay partes</strong>
       Pulsa <b>Nuevo parte</b> al empezar una reparación y vas rellenando sobre la marcha, aunque no tengas cobertura.</div>`;
   }else{
-    const ordenadas = [...partes].sort((a,b)=> (a.volcado-b.volcado) || (b.creado.localeCompare(a.creado)));
+    const ordenadas = [...vivos].sort((a,b)=> (a.volcado-b.volcado) || ((b.creado||'').localeCompare(a.creado||'')));
     html += ordenadas.map(p=>`
       <div class="card">
         <button class="card-tap" onclick="abrir('${p.id}')">
@@ -401,6 +438,7 @@ function renderList(){
       </div>`).join('');
   }
   app.innerHTML = html;
+  pintarSync();
 }
 
 /* ---------- Parte de trabajo (jornada / timeline) ---------- */
@@ -414,7 +452,7 @@ function cambiarDia(delta){
 let _segRefs = [];   // referencias a las líneas mostradas, por índice
 function segmentosDe(fecha){
   const segs=[];
-  partes.forEach(p=>{
+  partesVivos().forEach(p=>{
     if(diaDe(p)!==fecha) return;
     p.horas.forEach(h=>{
       if(h.tipo==='KM') return;
@@ -439,7 +477,7 @@ function segmentosDe(fecha){
 }
 function kmDe(fecha){
   let km=0;
-  partes.forEach(p=>{ if(diaDe(p)!==fecha) return; p.horas.forEach(h=>{ if(h.tipo==='KM'){ const n=parseFloat((h.cant||'').toString().replace(',','.')); if(!isNaN(n)) km+=n; } }); });
+  partesVivos().forEach(p=>{ if(diaDe(p)!==fecha) return; p.horas.forEach(h=>{ if(h.tipo==='KM'){ const n=parseFloat((h.cant||'').toString().replace(',','.')); if(!isNaN(n)) km+=n; } }); });
   return km;
 }
 function totalCardHTML(trabajoMin, comidaMin, km){
@@ -673,16 +711,15 @@ function crear(){
 function abrir(id){ view = {name:'form', id}; render(); }
 function volver(){ view = {name:'list'}; render(); }
 
-function addProd(){ const p=getParte(view.id); p.productos.push({ref:'',desc:'',cant:''}); save(partes); renderProductos(p); }
-function updProd(id,i,k,v){ const p=getParte(id); p.productos[i][k]=v; save(partes); }
-function delProd(id,i){ const p=getParte(id); p.productos.splice(i,1); save(partes); renderProductos(p); }
+function addProd(){ const p=getParte(view.id); p.productos.push({ref:'',desc:'',cant:''}); guardar(p); renderProductos(p); }
+function updProd(id,i,k,v){ const p=getParte(id); p.productos[i][k]=v; guardar(p); }
+function delProd(id,i){ const p=getParte(id); p.productos.splice(i,1); guardar(p); renderProductos(p); }
 
-function addHora(){ const p=getParte(view.id); p.horas.push({tipo:'H.D',ini:'',fin:'',cant:''}); save(partes); renderHoras(p); }
+function addHora(){ const p=getParte(view.id); p.horas.push({tipo:'H.D',ini:'',fin:'',cant:''}); guardar(p); renderHoras(p); }
 function updHora(id,i,k,v){
-  const p=getParte(id); p.horas[i][k]=v; save(partes);
-  if(k==='tipo') renderHoras(p);   // solo re-render al cambiar el tipo (KM activa/desactiva horas)
+  const p=getParte(id); p.horas[i][k]=v; guardar(p);
+  if(k==='tipo') renderHoras(p);
 }
-/* tiempo: aplica máscara y recalcula la cantidad en vivo, SIN re-render (no se pierde el foco) */
 function onTimeInput(id,i,k,el){
   maskTimeInput(el);
   const p=getParte(id), h=p.horas[i]; h[k]=el.value;
@@ -690,22 +727,23 @@ function onTimeInput(id,i,k,el){
     const a=horasDecimales(h.ini,h.fin);
     if(a){ h.cant=a; const c=document.getElementById('h_cant_'+i); if(c) c.value=a; }
   }
-  save(partes);
+  guardar(p);
 }
 function onTimeBlur(id,i,k,el){
   el.value = normHora(el.value);
   const p=getParte(id), h=p.horas[i]; h[k]=el.value;
   if(h.tipo!=='KM'){ const a=horasDecimales(h.ini,h.fin); if(a){ h.cant=a; const c=document.getElementById('h_cant_'+i); if(c) c.value=a; } }
-  save(partes);   // sin re-render: Tab pasa al siguiente campo
+  guardar(p);
 }
-function aplicarCalc(id,i){ const p=getParte(id); const h=p.horas[i]; h.cant=horasDecimales(h.ini,h.fin); save(partes); renderHoras(p); }
-function delHora(id,i){ const p=getParte(id); p.horas.splice(i,1); save(partes); renderHoras(p); }
+function aplicarCalc(id,i){ const p=getParte(id); const h=p.horas[i]; h.cant=horasDecimales(h.ini,h.fin); guardar(p); renderHoras(p); }
+function delHora(id,i){ const p=getParte(id); p.horas.splice(i,1); guardar(p); renderHoras(p); }
 
-function toggleVolcado(id){ const p=getParte(id); p.volcado=!p.volcado; save(partes); render(); toast(p.volcado?'Marcado como volcado':'Marcado como pendiente'); }
+function toggleVolcado(id){ const p=getParte(id); p.volcado=!p.volcado; guardar(p); render(); toast(p.volcado?'Marcado como volcado':'Marcado como pendiente'); }
 
 function borrar(id){
   confirmar('¿Borrar este parte? No se puede deshacer.', ()=>{
-    partes = partes.filter(p=>p.id!==id); save(partes);
+    const p = getParte(id);
+    if(p){ p.borrado = true; guardar(p); }
     view={name:'list'}; render(); toast('Parte borrado');
   });
 }
@@ -771,7 +809,87 @@ function importar(){
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* ============================================================
+   SINCRONIZACIÓN con la API
+   ============================================================ */
+/* A qué API hablamos: local en desarrollo, servidor en producción.
+   Es el equivalente del .env del backend, pero en el navegador. */
+const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:3001'
+  : 'https://api.adrianzgzdev.com';   // (dominio de producción; lo fijaremos al desplegar)
 
+/* marca de la última sincronización, para pedir solo lo nuevo la próxima vez */
+const SYNC_KEY = 'ultima_sync_v1';
+function getUltimaSync(){ return localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00Z'; }
+function setUltimaSync(iso){ localStorage.setItem(SYNC_KEY, iso); }
+
+/* SUBIR: manda cada parte local a la API (el servidor decide con last-write-wins) */
+async function subir(){
+  for(const p of partes){
+    const r = await fetch(API_URL + '/partes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: p.id, datos: p, actualizado: p.actualizado, borrado: p.borrado })
+    });
+    if(!r.ok) throw new Error('El servidor rechazó el parte ' + p.id);
+  }
+}
+/* BAJAR: trae del servidor lo cambiado desde la última sync y lo funde en local */
+async function bajar(){
+  const desde = getUltimaSync();
+  const r = await fetch(API_URL + '/partes?desde=' + encodeURIComponent(desde));
+  if(!r.ok) throw new Error('El servidor no devolvió los cambios');
+  const data = await r.json();
+
+  let masReciente = desde;
+  data.partes.forEach(remoto=>{
+    const local = getParte(remoto.id);
+    if(!local || local.actualizado < remoto.actualizado){
+      const fundido = { ...remoto.datos, id: remoto.id, actualizado: remoto.actualizado, borrado: remoto.borrado };
+      if(local){
+        partes[partes.indexOf(local)] = fundido;
+      }else{
+        partes.push(fundido);
+      }
+    }
+    if(remoto.actualizado > masReciente) masReciente = remoto.actualizado;
+  });
+
+  save(partes);
+  setUltimaSync(masReciente);
+}
+/* estado del sync, para el indicador */
+let syncEstado = 'idle';   // idle | sincronizando | ok | error
+
+/* SINCRONIZAR: sube y luego baja. Envuelto para que "sin cobertura" no rompa nada. */
+async function sincronizar(){
+  if(syncEstado === 'sincronizando') return;   // evita dobles pulsaciones
+  syncEstado = 'sincronizando'; pintarSync();
+  try{
+    await subir();
+    await bajar();
+    syncEstado = 'ok'; pintarSync();
+    render();
+    toast('Sincronizado');
+  }catch(e){
+    console.error('Sync falló:', e.message);
+    syncEstado = 'error'; pintarSync();
+    toast('Sin conexión — se guardó en el dispositivo');
+  }
+}
+/* muestra el estado del sync en el indicador de la lista */
+function pintarSync(){
+  const el = document.getElementById('syncEstado');
+  if(!el) return;
+  const ultima = localStorage.getItem('ultima_sync_v1');
+  if(syncEstado === 'sincronizando'){ el.textContent = 'Sincronizando…'; el.className = 'sync-info'; }
+  else if(syncEstado === 'error'){ el.textContent = 'Sin conexión'; el.className = 'sync-info err'; }
+  else if(ultima){
+    const h = new Date(ultima).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+    el.textContent = 'Sincronizado ' + h; el.className = 'sync-info ok';
+  }
+  else{ el.textContent = 'Sin sincronizar'; el.className = 'sync-info'; }
+}
 render();
 </script>
 <script>
