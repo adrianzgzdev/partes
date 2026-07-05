@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pedido Servicios</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta name="theme-color" content="#15191f">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Pedido Servicios">
 <style>
@@ -97,6 +99,8 @@
   }
   .badge.pend{background:var(--amber-bg);color:var(--amber-deep)}
   .badge.done{background:var(--green-bg);color:var(--green)}
+  .badge-tap{cursor:pointer;padding:8px 12px}
+  .badge-tap:active{transform:scale(0.92)}
   .empty{
     text-align:center;color:var(--ink-soft);padding:54px 20px;
     border:2px dashed var(--line-strong);border-radius:14px;
@@ -180,6 +184,10 @@
   .seg .times input{width:66px;padding:8px 6px;text-align:center;font-size:15px;font-family:var(--mono)}
   .seg .times .dash{color:var(--ink-soft)}
   .seg .dur{font-family:var(--mono);font-weight:700;font-size:15px;white-space:nowrap}
+  .seg .seg-meta{font-size:12px;color:var(--ink);font-weight:700;font-family:var(--mono);margin-top:2px}
+  .seg .ps-link{cursor:pointer}
+  .seg .ps-link .ps-go{color:var(--amber-deep);font-weight:400}
+  .seg .ps-link:active{opacity:.6}
   .gap{display:flex;align-items:center;justify-content:center;gap:10px;padding:7px 0;font-size:12px;font-weight:700}
   .gap.bad{color:var(--amber-deep)}
   .gap.over{color:#b3261e}
@@ -220,6 +228,7 @@
   .hint{font-size:12px;color:var(--ink-soft);margin-top:8px}
   .back{background:#15191f;color:#fff;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;cursor:pointer;margin-bottom:4px}
   .back:active{transform:translateY(1px)}
+  .form-nav{display:flex;gap:8px;flex-wrap:wrap}
   .sync-info{font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin:-4px 0 14px;padding-left:2px}
   .sync-info.ok{color:var(--green)}
   .sync-info.err{color:var(--amber-deep)}
@@ -431,7 +440,7 @@ function renderList(){
             <div class="desc">${esc(p.descripcion) || '—'}</div>
             <div class="meta">${esc(p.serie)?'Serie '+esc(p.serie)+' · ':''}${fmtFecha(p.creado)}</div>
           </div>
-          <span class="badge ${p.volcado?'done':'pend'}">${p.volcado?'VOLCADO':'PENDIENTE'}</span>
+          <span class="badge badge-tap ${p.volcado?'done':'pend'}" onclick="toggleEstadoLista(event,'${p.id}')" title="Tocar para cambiar estado">${p.volcado?'VOLCADO':'PENDIENTE'}</span>
           <span class="chev">›</span>
         </button>
         <button class="card-del" onclick="borrar('${p.id}')" title="Borrar parte">🗑</button>
@@ -442,7 +451,7 @@ function renderList(){
 }
 
 /* ---------- Parte de trabajo (jornada / timeline) ---------- */
-function verJornada(){ view = {name:'timeline', fecha: (view.fecha || hoyISO())}; render(); }
+function verJornada(fecha){ view = {name:'timeline', fecha: (fecha || view.fecha || hoyISO())}; render(); }
 function cambiarDia(delta){
   const [y,m,d] = view.fecha.split('-').map(Number);
   const dt = new Date(y,m-1,d); dt.setDate(dt.getDate()+delta);
@@ -459,7 +468,7 @@ function segmentosDe(fecha){
       const a=aMin(h.ini), b=aMin(h.fin);
       if(a===null||b===null) return;
       let dur=b-a; if(dur<0) dur+=1440;
-      segs.push({ref:h, ps:p.ps, tipo:h.tipo, ini:normHora(h.ini), fin:normHora(h.fin), a, b, dur});
+      segs.push({ref:h, ps:p.ps, serie:p.serie, horasMaquina:p.horasMaquina, parteId:p.id, tipo:h.tipo, ini:normHora(h.ini), fin:normHora(h.fin), a, b, dur});
     });
   });
   extras.forEach(e=>{
@@ -525,7 +534,11 @@ function renderTimeline(){
     html += `<div class="seg${isC?' seg-c':''}">
       <span class="tipo ${cls}">${s.tipo}</span>
       <div class="info">
-        <div class="ps">${isC?'Comida':(esc(s.ps)||'Sin PS')}</div>
+        ${isC
+          ? `<div class="ps">Comida</div>`
+          : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'} <span class="ps-go">›</span></div>
+             ${(s.serie||s.horasMaquina)?`<div class="seg-meta">${s.serie?'Serie '+esc(s.serie):''}${(s.serie&&s.horasMaquina)?' · ':''}${s.horasMaquina?esc(s.horasMaquina)+' h':''}</div>`:''}`
+        }
         <div class="times">
           <input class="mono" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.ini)}" oninput="onSegInput(${idx},'ini',this)" onblur="onSegBlur(${idx},'ini',this)">
           <span class="dash">–</span>
@@ -600,7 +613,10 @@ function renderForm(p){
   document.getElementById('topTitle').textContent = p.ps || 'Nuevo parte';
 
   app.innerHTML = `
-    <button class="back" onclick="volver()">‹ Pedidos</button>
+    <div class="form-nav">
+      <button class="back" onclick="volver()">‹ Pedidos</button>
+      <button class="back" onclick="verJornada('${p.fecha}')">‹ Parte de trabajo</button>
+    </div>
 
     <div class="section" style="margin-top:12px">
       <h2>Identificación</h2>
@@ -715,7 +731,7 @@ function addProd(){ const p=getParte(view.id); p.productos.push({ref:'',desc:'',
 function updProd(id,i,k,v){ const p=getParte(id); p.productos[i][k]=v; guardar(p); }
 function delProd(id,i){ const p=getParte(id); p.productos.splice(i,1); guardar(p); renderProductos(p); }
 
-function addHora(){ const p=getParte(view.id); p.horas.push({tipo:'H.D',ini:'',fin:'',cant:''}); guardar(p); renderHoras(p); }
+function addHora(){ const p=getParte(view.id); p.horas.push({tipo:'H.F',ini:'',fin:'',cant:''}); guardar(p); renderHoras(p); }
 function updHora(id,i,k,v){
   const p=getParte(id); p.horas[i][k]=v; guardar(p);
   if(k==='tipo') renderHoras(p);
@@ -739,6 +755,10 @@ function aplicarCalc(id,i){ const p=getParte(id); const h=p.horas[i]; h.cant=hor
 function delHora(id,i){ const p=getParte(id); p.horas.splice(i,1); guardar(p); renderHoras(p); }
 
 function toggleVolcado(id){ const p=getParte(id); p.volcado=!p.volcado; guardar(p); render(); toast(p.volcado?'Marcado como volcado':'Marcado como pendiente'); }
+function toggleEstadoLista(event, id){
+  event.stopPropagation();   // que tocar el estado NO abra el parte
+  toggleVolcado(id);
+}
 
 function borrar(id){
   confirmar('¿Borrar este parte? No se puede deshacer.', ()=>{
@@ -819,7 +839,8 @@ const API_URL = (location.hostname === 'localhost' || location.hostname === '127
   : 'https://api.adrianzgzdev.com';   // (dominio de producción; lo fijaremos al desplegar)
 
 /* marca de la última sincronización, para pedir solo lo nuevo la próxima vez */
-const SYNC_KEY = 'ultima_sync_v1';
+const SYNC_KEY = 'ultima_sync_v1';            // marca del último dato bajado (sync incremental)
+const SYNC_HORA_KEY = 'ultima_sync_hora_v1';  // momento real de la última sincronización (para el indicador)
 function getUltimaSync(){ return localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00Z'; }
 function setUltimaSync(iso){ localStorage.setItem(SYNC_KEY, iso); }
 
@@ -868,6 +889,7 @@ async function sincronizar(){
   try{
     await subir();
     await bajar();
+    localStorage.setItem(SYNC_HORA_KEY, nowISO());
     syncEstado = 'ok'; pintarSync();
     render();
     toast('Sincronizado');
@@ -881,7 +903,7 @@ async function sincronizar(){
 function pintarSync(){
   const el = document.getElementById('syncEstado');
   if(!el) return;
-  const ultima = localStorage.getItem('ultima_sync_v1');
+  const ultima = localStorage.getItem(SYNC_HORA_KEY);
   if(syncEstado === 'sincronizando'){ el.textContent = 'Sincronizando…'; el.className = 'sync-info'; }
   else if(syncEstado === 'error'){ el.textContent = 'Sin conexión'; el.className = 'sync-info err'; }
   else if(ultima){
