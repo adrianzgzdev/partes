@@ -257,12 +257,14 @@
 
 <div class="modal-bg" id="tokenBg">
   <div class="modal">
-    <div class="modal-msg">Token de sincronización</div>
-    <input id="tokenInput" type="password" class="mono" placeholder="pega aquí tu token" autocomplete="off" style="margin-bottom:16px">
-    <div class="modal-actions">
-      <button class="btn" id="tokenNo">Cancelar</button>
-      <button class="btn btn-primary" id="tokenYes">Guardar</button>
-    </div>
+    <form onsubmit="return false">
+      <div class="modal-msg">Token de sincronización</div>
+      <input id="tokenInput" type="password" class="mono" placeholder="pega aquí tu token" autocomplete="off" style="margin-bottom:16px">
+      <div class="modal-actions">
+        <button class="btn" id="tokenNo" type="button">Cancelar</button>
+        <button class="btn btn-primary" id="tokenYes" type="button">Guardar</button>
+      </div>
+    </form>
   </div>
 </div>
 
