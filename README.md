@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="favicon.svg" width="72" alt="Pedido Servicios">
+<img src="icon-192.png" width="72" alt="Pedido Servicios">
 
 # Pedido Servicios
 
