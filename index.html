@@ -255,6 +255,17 @@
   </div>
 </div>
 
+<div class="modal-bg" id="tokenBg">
+  <div class="modal">
+    <div class="modal-msg">Token de sincronización</div>
+    <input id="tokenInput" type="password" class="mono" placeholder="pega aquí tu token" autocomplete="off" style="margin-bottom:16px">
+    <div class="modal-actions">
+      <button class="btn" id="tokenNo">Cancelar</button>
+      <button class="btn btn-primary" id="tokenYes">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    Almacén local — todo vive en el navegador, sin internet.
@@ -423,6 +434,7 @@ function renderList(){
       <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
       <button class="btn" onclick="verJornada()">Parte de trabajo</button>
       <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
+      <button class="btn btn-ghost" style="flex:0 0 auto;min-width:0;width:48px;padding:13px" onclick="pedirToken()" title="Configurar token">⚙</button>
     </div>
     <div id="syncEstado" class="sync-info"></div>`;
 
@@ -832,15 +844,25 @@ function esc(s){ return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','
 /* ============================================================
    SINCRONIZACIÓN con la API
    ============================================================ */
-/* A qué API hablamos: local en desarrollo, servidor en producción.
-   Es el equivalente del .env del backend, pero en el navegador. */
 const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? 'http://localhost:3001'
-  : 'https://api.adrianzgzdev.com';   // (dominio de producción; lo fijaremos al desplegar)
+  : 'https://api.adrianzgzdev.com';
+
+/* ---- Token: se guarda en ESTE dispositivo, nunca en el código ---- */
+const TOKEN_KEY = 'sync_token_v1';
+function getToken(){ return localStorage.getItem(TOKEN_KEY) || ''; }
+function setToken(t){ localStorage.setItem(TOKEN_KEY, t.trim()); }
+function hayToken(){ return getToken().length > 0; }
+/* añade la cabecera del token a cada llamada de sync */
+function authHeaders(extra){
+  return Object.assign({ 'Authorization': 'Bearer ' + getToken() }, extra || {});
+}
+/* error propio para distinguir "token malo" (401) de "sin cobertura" */
+class ErrorAuth extends Error { constructor(){ super('No autorizado'); this.name = 'ErrorAuth'; } }
 
 /* marca de la última sincronización, para pedir solo lo nuevo la próxima vez */
-const SYNC_KEY = 'ultima_sync_v1';            // marca del último dato bajado (sync incremental)
-const SYNC_HORA_KEY = 'ultima_sync_hora_v1';  // momento real de la última sincronización (para el indicador)
+const SYNC_KEY = 'ultima_sync_v1';
+const SYNC_HORA_KEY = 'ultima_sync_hora_v1';
 function getUltimaSync(){ return localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00Z'; }
 function setUltimaSync(iso){ localStorage.setItem(SYNC_KEY, iso); }
 
@@ -849,16 +871,20 @@ async function subir(){
   for(const p of partes){
     const r = await fetch(API_URL + '/partes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ id: p.id, datos: p, actualizado: p.actualizado, borrado: p.borrado })
     });
+    if(r.status === 401) throw new ErrorAuth();
     if(!r.ok) throw new Error('El servidor rechazó el parte ' + p.id);
   }
 }
 /* BAJAR: trae del servidor lo cambiado desde la última sync y lo funde en local */
 async function bajar(){
   const desde = getUltimaSync();
-  const r = await fetch(API_URL + '/partes?desde=' + encodeURIComponent(desde));
+  const r = await fetch(API_URL + '/partes?desde=' + encodeURIComponent(desde), {
+    headers: authHeaders()
+  });
+  if(r.status === 401) throw new ErrorAuth();
   if(!r.ok) throw new Error('El servidor no devolvió los cambios');
   const data = await r.json();
 
@@ -867,11 +893,8 @@ async function bajar(){
     const local = getParte(remoto.id);
     if(!local || local.actualizado < remoto.actualizado){
       const fundido = { ...remoto.datos, id: remoto.id, actualizado: remoto.actualizado, borrado: remoto.borrado };
-      if(local){
-        partes[partes.indexOf(local)] = fundido;
-      }else{
-        partes.push(fundido);
-      }
+      if(local){ partes[partes.indexOf(local)] = fundido; }
+      else{ partes.push(fundido); }
     }
     if(remoto.actualizado > masReciente) masReciente = remoto.actualizado;
   });
@@ -882,9 +905,10 @@ async function bajar(){
 /* estado del sync, para el indicador */
 let syncEstado = 'idle';   // idle | sincronizando | ok | error
 
-/* SINCRONIZAR: sube y luego baja. Envuelto para que "sin cobertura" no rompa nada. */
+/* SINCRONIZAR: sube y luego baja. "Sin cobertura" o "token malo" no rompen nada. */
 async function sincronizar(){
-  if(syncEstado === 'sincronizando') return;   // evita dobles pulsaciones
+  if(syncEstado === 'sincronizando') return;
+  if(!hayToken()){ pedirToken(); return; }   // primera vez: pide el token
   syncEstado = 'sincronizando'; pintarSync();
   try{
     await subir();
@@ -894,6 +918,12 @@ async function sincronizar(){
     render();
     toast('Sincronizado');
   }catch(e){
+    if(e instanceof ErrorAuth){
+      syncEstado = 'error'; pintarSync();
+      toast('Token incorrecto');
+      pedirToken();   // reofrecer introducirlo
+      return;
+    }
     console.error('Sync falló:', e.message);
     syncEstado = 'error'; pintarSync();
     toast('Sin conexión — se guardó en el dispositivo');
@@ -911,6 +941,26 @@ function pintarSync(){
     el.textContent = 'Sincronizado ' + h; el.className = 'sync-info ok';
   }
   else{ el.textContent = 'Sin sincronizar'; el.className = 'sync-info'; }
+}
+/* pide/edita el token de sincronización en este dispositivo */
+function pedirToken(){
+  const bg = document.getElementById('tokenBg');
+  const inp = document.getElementById('tokenInput');
+  const yes = document.getElementById('tokenYes');
+  const no  = document.getElementById('tokenNo');
+  inp.value = getToken();
+  bg.classList.add('show');
+  inp.focus();
+  const close = ()=>{ bg.classList.remove('show'); yes.onclick=no.onclick=bg.onclick=inp.onkeydown=null; };
+  const guardarTk = ()=>{
+    const t = inp.value.trim();
+    if(!t){ toast('El token no puede estar vacío'); return; }
+    setToken(t); close(); toast('Token guardado'); sincronizar();
+  };
+  yes.onclick = guardarTk;
+  no.onclick  = close;
+  bg.onclick  = (e)=>{ if(e.target===bg) close(); };
+  inp.onkeydown = (e)=>{ if(e.key==='Enter') guardarTk(); };
 }
 render();
 </script>
