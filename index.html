@@ -863,13 +863,14 @@ function authHeaders(extra){
 class ErrorAuth extends Error { constructor(){ super('No autorizado'); this.name = 'ErrorAuth'; } }
 
 /* marca de la última sincronización, para pedir solo lo nuevo la próxima vez */
-const SYNC_KEY = 'ultima_sync_v1';
+const SYNC_KEY = 'ultima_sync_v2';
 const SYNC_HORA_KEY = 'ultima_sync_hora_v1';
 function getUltimaSync(){ return localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00Z'; }
 function setUltimaSync(iso){ localStorage.setItem(SYNC_KEY, iso); }
 
 /* SUBIR: manda cada parte local a la API (el servidor decide con last-write-wins) */
 async function subir(){
+  let masReciente = getUltimaSync();
   for(const p of partes){
     const r = await fetch(API_URL + '/partes', {
       method: 'POST',
@@ -878,7 +879,10 @@ async function subir(){
     });
     if(r.status === 401) throw new ErrorAuth();
     if(!r.ok) throw new Error('El servidor rechazó el parte ' + p.id);
+    const data = await r.json();
+    if(data.recibido && data.recibido > masReciente) masReciente = data.recibido;
   }
+  setUltimaSync(masReciente);
 }
 /* BAJAR: trae del servidor lo cambiado desde la última sync y lo funde en local */
 async function bajar(){
@@ -898,7 +902,7 @@ async function bajar(){
       if(local){ partes[partes.indexOf(local)] = fundido; }
       else{ partes.push(fundido); }
     }
-    if(remoto.actualizado > masReciente) masReciente = remoto.actualizado;
+    if(remoto.recibido > masReciente) masReciente = remoto.recibido;
   });
 
   save(partes);
