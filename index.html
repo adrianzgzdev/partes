@@ -149,6 +149,9 @@
   .calc{font-family:var(--mono);font-size:13px;color:var(--green);font-weight:700;margin-top:4px}
   .add-row{margin-top:2px}
   .hours-grid{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:9px}
+  .hfecha{margin-bottom:9px;display:flex;align-items:center;gap:8px}
+  .hfecha label{margin:0;flex-shrink:0}
+  .hfecha input{font-family:var(--mono);font-size:14px;padding:7px 9px;width:auto;flex:0 1 175px}
   .prod-grid{display:grid;grid-template-columns:1fr 2fr 80px;gap:9px}
   @media(max-width:560px){
     .hours-grid{grid-template-columns:1fr 1fr}
@@ -320,6 +323,14 @@ let extras = loadExtras();
 const META_MIN = 480; // 8 horas mínimas
 
 let view = {name:'list', id:null};
+/* filtro de la lista: recordar si el usuario oculta los volcados */
+const FILTRO_KEY = 'solo_pendientes_v1';
+let soloPendientes = localStorage.getItem(FILTRO_KEY) === '1';
+function toggleFiltro(){
+  soloPendientes = !soloPendientes;
+  localStorage.setItem(FILTRO_KEY, soloPendientes ? '1' : '0');
+  renderList();
+}
 
 /* ---------- utilidades ---------- */
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -436,11 +447,12 @@ function renderList(){
       <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
       <button class="btn" onclick="verJornada()">Parte de trabajo</button>
       <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
+      <button class="btn" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
       <button class="btn btn-ghost" style="flex:0 0 auto;min-width:0;width:48px;padding:13px" onclick="pedirToken()" title="Configurar token">⚙</button>
     </div>
     <div id="syncEstado" class="sync-info"></div>`;
 
-  const vivos = partesVivos();
+  const vivos = partesVivos().filter(p=> !soloPendientes || !p.volcado);
   if(vivos.length === 0){
     html += `<div class="empty"><strong>Aún no hay partes</strong>
       Pulsa <b>Nuevo parte</b> al empezar una reparación y vas rellenando sobre la marcha, aunque no tengas cobertura.</div>`;
@@ -473,12 +485,14 @@ function cambiarDia(delta){
   render();
 }
 let _segRefs = [];   // referencias a las líneas mostradas, por índice
+/* día efectivo de una línea de horas: el suyo propio o, si no lo tiene, el del parte */
+function diaDeHora(h, p){ return h.fecha || diaDe(p); }
 function segmentosDe(fecha){
   const segs=[];
   partesVivos().forEach(p=>{
-    if(diaDe(p)!==fecha) return;
     p.horas.forEach(h=>{
       if(h.tipo==='KM') return;
+      if(diaDeHora(h,p)!==fecha) return;
       const a=aMin(h.ini), b=aMin(h.fin);
       if(a===null||b===null) return;
       let dur=b-a; if(dur<0) dur+=1440;
@@ -500,7 +514,7 @@ function segmentosDe(fecha){
 }
 function kmDe(fecha){
   let km=0;
-  partesVivos().forEach(p=>{ if(diaDe(p)!==fecha) return; p.horas.forEach(h=>{ if(h.tipo==='KM'){ const n=parseFloat((h.cant||'').toString().replace(',','.')); if(!isNaN(n)) km+=n; } }); });
+  partesVivos().forEach(p=>{ p.horas.forEach(h=>{ if(h.tipo==='KM' && diaDeHora(h,p)===fecha){ const n=parseFloat((h.cant||'').toString().replace(',','.')); if(!isNaN(n)) km+=n; } }); });
   return km;
 }
 function totalCardHTML(trabajoMin, comidaMin, km){
@@ -716,6 +730,7 @@ function renderHoras(p){
     return `
     <div class="rrow">
       <button class="del" tabindex="-1" onclick="delHora('${p.id}',${i})">×</button>
+      <div class="hfecha"><label>Fecha</label><input type="date" value="${esc(diaDeHora(h,p))}" onchange="updHora('${p.id}',${i},'fecha',this.value)"></div>
       <div class="hours-grid">
         <div><label>Tipo</label>
           <select class="mono" onchange="updHora('${p.id}',${i},'tipo',this.value)">
@@ -745,7 +760,13 @@ function addProd(){ const p=getParte(view.id); p.productos.push({ref:'',desc:'',
 function updProd(id,i,k,v){ const p=getParte(id); p.productos[i][k]=v; guardar(p); }
 function delProd(id,i){ const p=getParte(id); p.productos.splice(i,1); guardar(p); renderProductos(p); }
 
-function addHora(){ const p=getParte(view.id); p.horas.push({tipo:'H.F',ini:'',fin:'',cant:''}); guardar(p); renderHoras(p); }
+function addHora(){
+  const p=getParte(view.id);
+  const ult = p.horas[p.horas.length-1];              // última línea, si la hay
+  const fecha = ult ? diaDeHora(ult,p) : diaDe(p);    // continúa donde lo dejaste
+  p.horas.push({tipo:'H.F',fecha,ini:'',fin:'',cant:''});
+  guardar(p); renderHoras(p);
+}
 function updHora(id,i,k,v){
   const p=getParte(id); p.horas[i][k]=v; guardar(p);
   if(k==='tipo') renderHoras(p);
