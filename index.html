@@ -414,9 +414,21 @@ function confirmar(msg, onYes, yesLabel){
 
 /* ---------- comida y restante ---------- */
 function fmtHM(min){ min=Math.abs(Math.round(min)); return Math.floor(min/60)+'h '+(min%60)+'m'; }
+/* busca el primer hueco del día entre tramos consecutivos; devuelve {ini,fin} o null */
+function primerHueco(fecha){
+  const segs = segmentosDe(fecha).filter(s=>!s.incompleta);
+  for(let i=0;i<segs.length-1;i++){
+    if(segs[i+1].a > segs[i].b) return { ini: deMin(segs[i].b), fin: deMin(segs[i+1].a) };
+  }
+  return null;
+}
 function addComida(){
-  extras.push({id:uid(), fecha:view.fecha, tipo:'H.C', ini:'', fin:''});
-  saveExtras(); renderTimeline(); toast('Línea de comida añadida');
+  const hueco = primerHueco(view.fecha);
+  extras.push({id:uid(), fecha:view.fecha, tipo:'H.C',
+               ini: hueco ? hueco.ini : '',
+               fin: hueco ? hueco.fin : ''});
+  saveExtras(); renderTimeline();
+  toast(hueco ? `Comida en el hueco ${hueco.ini}–${hueco.fin}` : 'Línea de comida añadida');
 }
 function delExtra(id){ extras=extras.filter(e=>e.id!==id); saveExtras(); renderTimeline(); }
 
