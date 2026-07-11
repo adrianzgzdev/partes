@@ -436,10 +436,15 @@ function addComida(){
 }
 function addImproductividad(){
   const hueco = primerHueco(view.fecha);
-  extras.push({id:uid(), fecha:view.fecha, tipo:'H.I', desc:'',
+  const nuevaId = uid();
+  extras.push({id:nuevaId, fecha:view.fecha, tipo:'H.I', desc:'',
                ini: hueco ? hueco.ini : '',
                fin: hueco ? hueco.fin : ''});
   saveExtras(); renderTimeline();
+  requestAnimationFrame(()=>{
+    const inp = document.querySelector(`.seg-i .desc-i input[data-id="${nuevaId}"]`);
+    if(inp) inp.focus();
+  });
   toast(hueco ? `Improductividad en el hueco ${hueco.ini}–${hueco.fin}` : 'Línea de improductividad añadida');
 }
 function delExtra(id){ extras=extras.filter(e=>e.id!==id); saveExtras(); renderTimeline(); }
@@ -596,7 +601,7 @@ function renderTimeline(){
       <span class="tipo ${cls}">${s.tipo}</span>
       <div class="info">
         ${isI
-          ? `<div class="desc-i"><input value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="updDesc('${s.ref.id}',this.value)"></div>`
+          ? `<div class="desc-i"><input data-id="${s.ref.id}" value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="updDesc('${s.ref.id}',this.value)"></div>`
           : isC
             ? `<div class="ps">Comida</div>`
             : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'} <span class="ps-go">›</span></div>
