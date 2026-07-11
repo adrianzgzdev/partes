@@ -214,6 +214,10 @@
   .tipo.hc{background:#fcefe1;color:#b85405}
   .seg-c{background:#fffaf3}
   .dur-c{color:#b85405}
+  .tipo.hi{background:#eceef2;color:#4a5568}
+  .seg-i{background:#fbfcfd}
+  .seg .desc-i{font-size:13px;color:var(--ink);margin-top:2px}
+  .seg .desc-i input{width:100%;padding:6px 8px;font-size:14px;font-family:var(--sans)}
   .seg-del{flex-shrink:0;width:40px;border:0;background:none;color:#b3261e;font-size:16px;cursor:pointer}
   /* ---- Modal ---- */
   .modal-bg{position:fixed;inset:0;background:rgba(10,12,15,.55);display:none;align-items:center;justify-content:center;z-index:60;padding:24px}
@@ -290,7 +294,7 @@ function migrarClave(){
   }catch(e){}
 }
 migrarClave();
-const TIPOS = ['H.D','H.F','H.C','KM','H.T','Otro'];   // H.D desplaz · H.F trabajo · H.C comida
+const TIPOS = ['H.D','H.F','H.C','H.I','KM','H.T','Otro'];   // H.D desplaz · H.F trabajo · H.C comida · H.I improductiva
 
 function load(){
   try{
@@ -430,7 +434,20 @@ function addComida(){
   saveExtras(); renderTimeline();
   toast(hueco ? `Comida en el hueco ${hueco.ini}–${hueco.fin}` : 'Línea de comida añadida');
 }
+function addImproductividad(){
+  const hueco = primerHueco(view.fecha);
+  extras.push({id:uid(), fecha:view.fecha, tipo:'H.I', desc:'',
+               ini: hueco ? hueco.ini : '',
+               fin: hueco ? hueco.fin : ''});
+  saveExtras(); renderTimeline();
+  toast(hueco ? `Improductividad en el hueco ${hueco.ini}–${hueco.fin}` : 'Línea de improductividad añadida');
+}
 function delExtra(id){ extras=extras.filter(e=>e.id!==id); saveExtras(); renderTimeline(); }
+/* guarda la descripción de una improductividad sin re-renderizar (conserva el foco) */
+function updDesc(id, valor){
+  const e = extras.find(x=>x.id===id);
+  if(e){ e.desc = valor; saveExtras(); }
+}
 
 /* ---------- persistir el formulario en edición ---------- */
 function bind(el, parte, prop){
@@ -513,13 +530,14 @@ function segmentosDe(fecha){
   });
   extras.forEach(e=>{
     if(e.fecha!==fecha) return;
+    const nombre = e.tipo==='H.I' ? (e.desc || 'Improductividad') : 'Comida';
     const a=aMin(e.ini), b=aMin(e.fin);
     if(a===null||b===null){
-      segs.push({ref:e, ps:'Comida', tipo:e.tipo, ini:e.ini||'', fin:e.fin||'', a:99999, b:null, dur:0, incompleta:true});
+      segs.push({ref:e, ps:nombre, tipo:e.tipo, ini:e.ini||'', fin:e.fin||'', a:99999, b:null, dur:0, incompleta:true});
       return;
     }
     let dur=b-a; if(dur<0) dur+=1440;
-    segs.push({ref:e, ps:'Comida', tipo:e.tipo, ini:normHora(e.ini), fin:normHora(e.fin), a, b, dur});
+    segs.push({ref:e, ps:nombre, tipo:e.tipo, ini:normHora(e.ini), fin:normHora(e.fin), a, b, dur});
   });
   segs.sort((x,y)=> x.a - y.a);
   return segs;
@@ -558,6 +576,7 @@ function renderTimeline(){
     <div class="total ${trabajoMin===0?'zero':''}" id="totalCard">${totalCardHTML(trabajoMin, comidaMin, kmDe(fecha))}</div>
     <div class="tl-actions">
       <button class="btn" onclick="addComida()">+ Comida (H.C)</button>
+      <button class="btn" onclick="addImproductividad()">+ Improductividad (H.I)</button>
       <button class="btn" onclick="empalmarTodo()">⛓ Empalmar todo</button>
     </div>`;
 
@@ -569,15 +588,19 @@ function renderTimeline(){
 
   segs.forEach((s,idx)=>{
     const isC = s.tipo==='H.C';
-    const cls = s.tipo==='H.D'?'hd':(s.tipo==='H.F'?'hf':(isC?'hc':''));
+    const isI = s.tipo==='H.I';
+    const esExtra = isC || isI;
+    const cls = s.tipo==='H.D'?'hd':(s.tipo==='H.F'?'hf':(isC?'hc':(isI?'hi':'')));
     const durTxt = s.incompleta ? '—' : `${(s.dur/60).toFixed(2).replace('.',',')} h`;
-    html += `<div class="seg${isC?' seg-c':''}">
+    html += `<div class="seg${isC?' seg-c':''}${isI?' seg-i':''}">
       <span class="tipo ${cls}">${s.tipo}</span>
       <div class="info">
-        ${isC
-          ? `<div class="ps">Comida</div>`
-          : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'} <span class="ps-go">›</span></div>
-             ${(s.serie||s.horasMaquina)?`<div class="seg-meta">${s.serie?'Serie '+esc(s.serie):''}${(s.serie&&s.horasMaquina)?' · ':''}${s.horasMaquina?esc(s.horasMaquina)+' h':''}</div>`:''}`
+        ${isI
+          ? `<div class="desc-i"><input value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="updDesc('${s.ref.id}',this.value)"></div>`
+          : isC
+            ? `<div class="ps">Comida</div>`
+            : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'} <span class="ps-go">›</span></div>
+               ${(s.serie||s.horasMaquina)?`<div class="seg-meta">${s.serie?'Serie '+esc(s.serie):''}${(s.serie&&s.horasMaquina)?' · ':''}${s.horasMaquina?esc(s.horasMaquina)+' h':''}</div>`:''}`
         }
         <div class="times">
           <input class="mono" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(s.ini)}" oninput="onSegInput(${idx},'ini',this)" onblur="onSegBlur(${idx},'ini',this)">
@@ -586,7 +609,7 @@ function renderTimeline(){
         </div>
       </div>
       <span class="dur${isC?' dur-c':''}" id="dur_${idx}">${durTxt}</span>
-      ${isC?`<button class="seg-del" tabindex="-1" onclick="delExtra('${s.ref.id}')" title="Quitar comida">🗑</button>`:''}
+      ${esExtra?`<button class="seg-del" tabindex="-1" onclick="delExtra('${s.ref.id}')" title="Quitar línea">🗑</button>`:''}
     </div>
     <div class="gap" id="gap_${idx}"></div>`;
   });
@@ -625,11 +648,19 @@ function onSegInput(idx,k,el){
   if('cant' in h){ const a=horasDecimales(h.ini,h.fin); if(a) h.cant=a; }
   saveAll(); refreshReadouts();
 }
+/* ¿el orden en pantalla coincide con el orden real por hora? */
+function ordenCorrecto(){
+  const actual = segmentosDe(view.fecha).map(s=>s.ref);
+  if(actual.length !== _segRefs.length) return false;
+  return actual.every((ref,i)=> ref === _segRefs[i]);
+}
 function onSegBlur(idx,k,el){
   el.value=normHora(el.value);
   const h=_segRefs[idx]; h[k]=el.value;
   if('cant' in h){ const a=horasDecimales(h.ini,h.fin); if(a) h.cant=a; }
-  saveAll(); refreshReadouts();   // sin re-render: Tab pasa al siguiente campo
+  saveAll();
+  if(ordenCorrecto()) refreshReadouts();   // orden intacto: refresco ligero, conserva foco/Tab
+  else renderTimeline();                    // una línea saltó de sitio: repintar y recolocar
 }
 function empalmar(idx,hhmm){
   const h=_segRefs[idx]; h.ini=hhmm;
