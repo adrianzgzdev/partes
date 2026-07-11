@@ -455,9 +455,13 @@ function updDesc(id, valor){
 }
 
 /* ---------- persistir el formulario en edición ---------- */
-function bind(el, parte, prop){
+function bind(el, parte, prop, upper){
   el.value = parte[prop] ?? '';
-  el.addEventListener('input', ()=>{ parte[prop] = el.value; guardar(parte); });
+  el.addEventListener('input', ()=>{
+    if(upper) mayus(el);
+    parte[prop] = el.value;
+    guardar(parte);
+  });
 }
 
 /* ============================================================
@@ -601,7 +605,7 @@ function renderTimeline(){
       <span class="tipo ${cls}">${s.tipo}</span>
       <div class="info">
         ${isI
-          ? `<div class="desc-i"><input data-id="${s.ref.id}" value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="updDesc('${s.ref.id}',this.value)"></div>`
+          ? `<div class="desc-i"><input data-id="${s.ref.id}" value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="mayus(this);updDesc('${s.ref.id}',this.value)"></div>`
           : isC
             ? `<div class="ps">Comida</div>`
             : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'} <span class="ps-go">›</span></div>
@@ -696,9 +700,9 @@ function renderForm(p){
 
     <div class="section" style="margin-top:12px">
       <h2>Identificación</h2>
-      <div class="field"><label>Nº Pedido de Servicio</label><input id="f_ps" class="mono"></div>
+      <div class="field"><label>Nº Pedido de Servicio</label><input id="f_ps" class="mono" inputmode="numeric"></div>
       <div class="grid2">
-        <div class="field"><label>Nº serie máquina</label><input id="f_serie" class="mono"></div>
+        <div class="field"><label>Nº serie máquina</label><input id="f_serie" class="mono" inputmode="numeric"></div>
         <div class="field"><label>Cliente</label><input id="f_cliente"></div>
       </div>
       <div class="grid2">
@@ -744,15 +748,15 @@ function renderForm(p){
     </div>
   `;
 
-  bind(document.getElementById('f_ps'), p, 'ps');
-  bind(document.getElementById('f_serie'), p, 'serie');
-  bind(document.getElementById('f_cliente'), p, 'cliente');
-  bind(document.getElementById('f_desc'), p, 'descripcion');
+  bind(document.getElementById('f_ps'), p, 'ps', true);
+  bind(document.getElementById('f_serie'), p, 'serie', true);
+  bind(document.getElementById('f_cliente'), p, 'cliente', true);
+  bind(document.getElementById('f_desc'), p, 'descripcion', true);
   if(!p.fecha) p.fecha = diaDe(p);
   bind(document.getElementById('f_fecha'), p, 'fecha');
   bind(document.getElementById('f_horasMaq'), p, 'horasMaquina');
-  bind(document.getElementById('f_res'), p, 'comentarioResolucion');
-  bind(document.getElementById('f_def'), p, 'comentarioDefecto');
+  bind(document.getElementById('f_res'), p, 'comentarioResolucion', true);
+  bind(document.getElementById('f_def'), p, 'comentarioDefecto', true);
   document.getElementById('f_ps').addEventListener('input', ()=>{ document.getElementById('topTitle').textContent = p.ps || 'Nuevo parte'; });
 
   renderProductos(p);
@@ -766,7 +770,7 @@ function renderProductos(p){
       <button class="del" tabindex="-1" onclick="delProd('${p.id}',${i})">×</button>
       <div class="prod-grid">
         <div><label>Referencia / Nº</label><input class="mono" value="${esc(pr.ref)}" oninput="updProd('${p.id}',${i},'ref',this.value)"></div>
-        <div><div class="lbl-row"><label>Descripción</label><button class="copy-mini" tabindex="-1" onclick="copyProdDesc('${p.id}',${i})">⧉</button></div><input value="${esc(pr.desc)}" oninput="updProd('${p.id}',${i},'desc',this.value)"></div>
+        <div><div class="lbl-row"><label>Descripción</label><button class="copy-mini" tabindex="-1" onclick="copyProdDesc('${p.id}',${i})">⧉</button></div><input value="${esc(pr.desc)}" oninput="mayus(this);updProd('${p.id}',${i},'desc',this.value)"></div>
         <div><label>Cant.</label><input class="mono" inputmode="decimal" value="${esc(pr.cant)}" oninput="updProd('${p.id}',${i},'cant',this.value)"></div>
       </div>
     </div>`).join('') || '<p class="hint" style="margin:0 0 10px">Ningún producto añadido.</p>';
@@ -909,6 +913,13 @@ function importar(){
     r.readAsText(f);
   };
   inp.click();
+}
+
+/* pasa un input a MAYÚSCULAS al teclear, conservando la posición del cursor */
+function mayus(el){
+  const ini = el.selectionStart, fin = el.selectionEnd;
+  el.value = el.value.toUpperCase();
+  try{ el.setSelectionRange(ini, fin); }catch(e){}
 }
 
 function esc(s){ return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
