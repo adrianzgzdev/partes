@@ -32,7 +32,13 @@ sin perder ningún dato por el camino.
 - **Parte de trabajo (jornada)**: monta el timeline del día con todas las líneas
   de horas, suma el total, detecta huecos y solapes entre tramos y permite
   empalmarlos para cuadrar la jornada. Marca el restante para las 8 h y admite
-  una línea de comida (H.C).
+  líneas de **comida** (H.C, no computa) e **improductividad** (H.I, con
+  descripción libre y sí computa), que se colocan solas en el primer hueco libre.
+- **Horas por día en un mismo pedido**: cada línea de horas lleva su propia
+  fecha, así se puede trabajar varios días sobre el mismo parte sin duplicarlo.
+- **Papelera**: los borrados son reversibles; una PS eliminada por error se
+  restaura desde la papelera y la restauración se propaga a los demás
+  dispositivos.
 - **Copiado por casilla**: cada campo se copia por separado para volcarlo rápido
   al sistema de gestión.
 - **100% sin conexión** e **instalable** como app (PWA).
@@ -55,23 +61,24 @@ sea un extra, nunca un requisito.
 - **Persistencia local**: `localStorage`, con migración segura de claves
   (copiar-y-conservar en vez de renombrar, para no destruir datos guardados).
 - **Sincronización**: API propia en **Node.js + Express** sobre **PostgreSQL**.
-  Resolución de conflictos **_last-write-wins_** por marca de tiempo
-  `actualizado`, sync **incremental** (solo se baja lo cambiado desde la última
-  vez) y **borrados lógicos** para que una baja en un dispositivo se propague al
-  resto.
+  Dos relojes con responsabilidades separadas: la resolución de conflictos es
+  **_last-write-wins_** por la hora de edición del **cliente** (`actualizado`),
+  mientras que la descarga **incremental** se filtra por la hora del **servidor**
+  (`recibido`), monótona y a prueba de desfases de reloj entre dispositivos. Los
+  borrados son **lógicos**, para que una baja en un dispositivo se propague al
+  resto y siga siendo reversible.
 - **Seguridad**: acceso a la API protegido con **token** (`Authorization:
   Bearer`), comparado en tiempo constante con SHA-256 + `timingSafeEqual`. El
   token nunca vive en el código; se inyecta como variable de entorno en el
   servidor.
-- **Infra**: contenedores Docker gestionados con EasyPanel, HTTPS vía Traefik y
-  DNS en Cloudflare.
+- **Infra**: contenedores Docker gestionados con EasyPanel y HTTPS vía Traefik.
 
 > El código del backend vive en un repositorio privado aparte.
 
 ## Stack
 
 `JavaScript (vanilla)` · `HTML` · `CSS` · `PWA / Service Worker` ·
-`Node.js` · `Express` · `PostgreSQL` · `Docker` · `Traefik` · `Cloudflare`
+`Node.js` · `Express` · `PostgreSQL` · `Docker` · `Traefik`
 
 ## Uso
 
