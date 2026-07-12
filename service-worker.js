@@ -1,7 +1,7 @@
 /* Service worker de Pedido Servicios.
    Cachea la app para que arranque al instante y funcione sin conexión.
    Para publicar una actualización: sube la versión (v1 -> v2) y haz push. */
-const CACHE = 'pedido-servicios-v13';
+const CACHE = 'pedido-servicios-v14';
 const ASSETS = [
   './',
   './index.html',
@@ -28,15 +28,27 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // Navegaciones: intenta traer la versión nueva y usa la app cacheada sin red.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res.ok) caches.open(CACHE).then(c => c.put('./index.html', res.clone()));
+          return res;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Recursos estáticos del mismo origen. Las APIs nunca pasan por esta rama.
   e.respondWith(
-    caches.match(req).then(cached => {
-      if (cached) return cached;
-      return fetch(req).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => { try { c.put(req, copy); } catch (_) {} });
-        return res;
-      }).catch(() => caches.match('./index.html'));
-    })
+    caches.match(req).then(cached => cached || fetch(req).then(res => {
+      if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
+      return res;
+    }))
   );
 });

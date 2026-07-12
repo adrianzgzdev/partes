@@ -227,7 +227,7 @@
   .modal-bg{position:fixed;inset:0;background:rgba(10,12,15,.55);display:none;align-items:center;justify-content:center;z-index:60;padding:24px}
   .modal-bg.show{display:flex}
   .modal{background:#fff;border-radius:14px;padding:20px;max-width:360px;width:100%;box-shadow:0 20px 50px -10px rgba(0,0,0,.45)}
-  .modal-msg{font-size:15px;font-weight:600;margin-bottom:18px;line-height:1.4}
+  .modal-msg{font-size:15px;font-weight:600;margin-bottom:18px;line-height:1.4;white-space:pre-line}
   .modal-actions{display:flex;gap:10px}
   .modal-actions .btn{flex:1}
   .toast{
@@ -243,6 +243,14 @@
   .sync-info{font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin:-4px 0 14px;padding-left:2px}
   .sync-info.ok{color:var(--green)}
   .sync-info.err{color:var(--amber-deep)}
+  .sync-info.dirty{color:var(--amber-deep);font-weight:700}
+  .storage-alert{display:none;background:#fbe9e7;color:#8f1d16;border:1px solid #e7b9b4;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-weight:700;font-size:13px}
+  .storage-alert.show{display:block}
+  .conflicts{background:#fff8e8;border:1px solid #edc879;border-radius:12px;padding:12px 14px;margin-bottom:14px}
+  .conflicts strong{display:block;margin-bottom:8px;color:#7a4800}
+  .conflict-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed #e2c58a;font-size:13px}
+  .conflict-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .conflict-row .btn{min-height:38px;padding:7px 10px;font-size:12px}
 </style>
 </head>
 <body>
@@ -253,7 +261,10 @@
   <span class="count" id="topCount">0</span>
 </header>
 
-<div class="wrap" id="app"></div>
+<div class="wrap">
+  <div class="storage-alert" id="storageAlert" role="alert"></div>
+  <main id="app"></main>
+</div>
 <div class="toast" id="toast"></div>
 
 <div class="modal-bg" id="modalBg">
@@ -285,15 +296,46 @@
    ============================================================ */
 const KEY = 'partes_v1';                    // clave actual (nombre neutro)
 const KEY_ANTIGUA = 'partes_alquinta_v1';   // clave antigua — solo para migrar datos ya guardados
+const EXTRAS_KEY = 'extras_v1';
+const EXTRAS_UPDATED_KEY = 'extras_actualizado_v1';
+const DIRTY_KEY = 'cambios_pendientes_v1';
+const CONFLICTS_KEY = 'conflictos_v1';
+const BASE_KEY = 'sync_base_v1';
+const EXTRAS_SYNC_ID = '__pedido_servicios_extras_v1__';
+let storageError = '';
+
+function mostrarErrorStorage(msg){
+  storageError = msg || 'No se ha podido guardar. No cierres la aplicación y exporta una copia.';
+  const el=document.getElementById('storageAlert');
+  if(el){ el.textContent=storageError; el.classList.add('show'); }
+}
+function safeGet(key, fallback=null){
+  try{ const v=localStorage.getItem(key); return v===null ? fallback : v; }
+  catch(e){ mostrarErrorStorage('El navegador no permite leer el almacenamiento local.'); return fallback; }
+}
+function safeSet(key, value){
+  try{ localStorage.setItem(key,value); return true; }
+  catch(e){ mostrarErrorStorage('El último cambio NO se ha guardado. Exporta una copia antes de cerrar.'); return false; }
+}
+function parseStored(key, fallback){
+  try{ const raw=safeGet(key); return raw===null ? fallback : JSON.parse(raw); }
+  catch(e){ mostrarErrorStorage('Hay datos locales dañados. No se han borrado; exporta una copia antes de continuar.'); return fallback; }
+}
+function marcarPendiente(){ safeSet(DIRTY_KEY,'1'); }
+async function asegurarPersistencia(){
+  try{
+    if(navigator.storage&&navigator.storage.persist){ await navigator.storage.persist(); }
+  }catch(e){}
+}
 
 /* Migración: si hay datos bajo la clave antigua y aún no bajo la nueva, los copiamos.
    La antigua se conserva como respaldo. Corre una sola vez: al existir ya la nueva, no repite. */
 function migrarClave(){
   try{
-    const yaEnNueva = localStorage.getItem(KEY);
-    const enAntigua = localStorage.getItem(KEY_ANTIGUA);
+    const yaEnNueva = safeGet(KEY);
+    const enAntigua = safeGet(KEY_ANTIGUA);
     if(enAntigua !== null && yaEnNueva === null){
-      localStorage.setItem(KEY, enAntigua);
+      safeSet(KEY, enAntigua);
     }
   }catch(e){}
 }
@@ -302,17 +344,22 @@ const TIPOS = ['H.D','H.F','H.C','H.I','KM','H.T','Otro'];   // H.D desplaz · H
 
 function load(){
   try{
-    const list = JSON.parse(localStorage.getItem(KEY)) || [];
+    const list = parseStored(KEY, []);
+    if(!Array.isArray(list)) throw new Error('Formato local no válido');
     let cambiado = false;
     list.forEach(p=>{
       if(p.actualizado === undefined){ p.actualizado = p.creado || nowISO(); cambiado = true; }
       if(p.borrado === undefined){ p.borrado = false; cambiado = true; }
     });
-    if(cambiado) save(list);
+    if(cambiado) save(list, false);
     return list;
-  }catch(e){ return []; }
+  }catch(e){ mostrarErrorStorage('No se pudieron interpretar los partes guardados. Los datos originales siguen en el navegador.'); return []; }
 }
-function save(list){ localStorage.setItem(KEY, JSON.stringify(list)); }
+function save(list, dirty=true){
+  const ok=safeSet(KEY, JSON.stringify(list));
+  if(ok && dirty) marcarPendiente();
+  return ok;
+}
 
 /* marca un parte como "editado ahora" (para el sync) */
 function tocar(p){ if(p) p.actualizado = nowISO(); }
@@ -322,22 +369,30 @@ function guardar(p){ tocar(p); save(partes); }
 let partes = load();
 
 /* líneas extra del día que no pertenecen a un PS (p. ej. la comida) */
-const EXTRAS_KEY = 'extras_v1';
-function loadExtras(){ try{ return JSON.parse(localStorage.getItem(EXTRAS_KEY))||[]; }catch(e){ return []; } }
-function saveExtras(){ localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras)); }
-function saveAll(){ save(partes); saveExtras(); }
+function loadExtras(){ const v=parseStored(EXTRAS_KEY,[]); return Array.isArray(v)?v:[]; }
+function saveExtras(dirty=true){
+  const ok=safeSet(EXTRAS_KEY, JSON.stringify(extras));
+  if(ok && dirty){ safeSet(EXTRAS_UPDATED_KEY,nowISO()); marcarPendiente(); }
+  return ok;
+}
+function saveAll(){ const a=save(partes); const b=saveExtras(); return a&&b; }
 let extras = loadExtras();
+if(!safeGet(EXTRAS_UPDATED_KEY)) safeSet(EXTRAS_UPDATED_KEY,extras.length?nowISO():'1970-01-01T00:00:00Z');
+let conflictos = parseStored(CONFLICTS_KEY, []);
+if(!Array.isArray(conflictos)) conflictos=[];
+function saveConflictos(){ safeSet(CONFLICTS_KEY,JSON.stringify(conflictos)); }
+function getBase(){ const b=parseStored(BASE_KEY,{}); return b&&typeof b==='object'&&!Array.isArray(b)?b:{}; }
 
 const META_MIN = 480; // 8 horas mínimas
 
 let view = {name:'list', id:null};
 /* dos filtros independientes de la lista */
 const FILTRO_KEY = 'solo_pendientes_v2';
-let soloPendientes = localStorage.getItem(FILTRO_KEY) === '1';
+let soloPendientes = safeGet(FILTRO_KEY) === '1';
 let verBorradas = false;   // no se recuerda: la papelera es una consulta puntual
 function toggleFiltro(){
   soloPendientes = !soloPendientes;
-  localStorage.setItem(FILTRO_KEY, soloPendientes ? '1' : '0');
+  safeSet(FILTRO_KEY, soloPendientes ? '1' : '0');
   renderList();
 }
 function toggleBorradas(){
@@ -424,6 +479,22 @@ function confirmar(msg, onYes, yesLabel){
   no.onclick=close;
   bg.onclick=(e)=>{ if(e.target===bg) close(); };
 }
+/* ---------- aviso propio de un solo botón (no usa alert() del navegador) ---------- */
+function avisar(msg, label){
+  const bg=document.getElementById('modalBg');
+  document.getElementById('modalMsg').textContent = msg;
+  const yes=document.getElementById('modalYes'), no=document.getElementById('modalNo');
+  yes.textContent = label || 'Entendido';
+  yes.className = 'btn btn-primary';
+  no.style.display = 'none';
+  bg.classList.add('show');
+  const close=()=>{
+    bg.classList.remove('show'); yes.onclick=bg.onclick=null;
+    no.style.display=''; yes.className='btn btn-danger';
+  };
+  yes.onclick=close;
+  bg.onclick=(e)=>{ if(e.target===bg) close(); };
+}
 
 /* ---------- comida y restante ---------- */
 function fmtHM(min){ min=Math.abs(Math.round(min)); return Math.floor(min/60)+'h '+(min%60)+'m'; }
@@ -497,8 +568,18 @@ function renderList(){
       <button class="btn ${soloPendientes?'btn-activo':''}" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
       <button class="btn btn-icono ${verBorradas?'btn-danger':''}" onclick="toggleBorradas()" title="${verBorradas?'Salir de la papelera':'Ver partes borrados'}">🗑</button>
       <button class="btn btn-ghost btn-icono" onclick="pedirToken()" title="Configurar token">⚙</button>
+      <button class="btn" onclick="exportar()">↓ Copia</button>
+      <button class="btn" onclick="importar()">↑ Restaurar</button>
     </div>
     <div id="syncEstado" class="sync-info"></div>`;
+
+  if(conflictos.length){
+    html += `<div class="conflicts"><strong>⚠ ${conflictos.length} conflicto${conflictos.length===1?'':'s'} de sincronización</strong>
+      ${conflictos.map(c=>`<div class="conflict-row"><span>${c.tipo==='extras'?'Jornada (comida/improductividad)':esc((c.datos&&c.datos.ps)||'Parte sin PS')} · copia local de ${fmtFecha(c.detectado)}</span>
+        <button class="btn" onclick="recuperarConflicto('${c.id}')">Recuperar</button>
+        <button class="btn btn-ghost" onclick="descartarConflicto('${c.id}')">Descartar</button></div>`).join('')}
+    </div>`;
+  }
 
   let vivos;
   if(verBorradas)             vivos = partes.filter(p=> p.borrado);
@@ -856,14 +937,36 @@ function onTimeBlur(id,i,k,el){
 function aplicarCalc(id,i){ const p=getParte(id); const h=p.horas[i]; h.cant=horasDecimales(h.ini,h.fin); guardar(p); renderHoras(p); }
 function delHora(id,i){ const p=getParte(id); p.horas.splice(i,1); guardar(p); renderHoras(p); }
 
-function toggleVolcado(id){ const p=getParte(id); p.volcado=!p.volcado; guardar(p); render(); toast(p.volcado?'Marcado como volcado':'Marcado como pendiente'); }
+function erroresParte(p){
+  const errores=[];
+  if(!p.ps || !p.ps.trim() || p.ps.trim().endsWith('/')) errores.push('número de Pedido de Servicio completo');
+  if(!p.descripcion || !p.descripcion.trim()) errores.push('descripción');
+  if(!p.horas.length) errores.push('al menos una línea de horas o KM');
+  p.horas.forEach((h,i)=>{
+    if(h.tipo==='KM'){
+      if(!h.cant || isNaN(parseFloat(String(h.cant).replace(',','.')))) errores.push(`KM válidos en la línea ${i+1}`);
+    }else{
+      const ini=aMin(h.ini), fin=aMin(h.fin);
+      if(ini===null || fin===null || normHora(h.ini)!==h.ini || normHora(h.fin)!==h.fin) errores.push(`horas válidas en la línea ${i+1}`);
+    }
+  });
+  return [...new Set(errores)];
+}
+function toggleVolcado(id){
+  const p=getParte(id);
+  if(!p.volcado){
+    const errores=erroresParte(p);
+    if(errores.length){ avisar('Antes de marcarlo como volcado revisa:\n\n• '+errores.join('\n• ')); return; }
+  }
+  p.volcado=!p.volcado; guardar(p); render(); toast(p.volcado?'Marcado como volcado':'Marcado como pendiente');
+}
 function toggleEstadoLista(event, id){
   event.stopPropagation();   // que tocar el estado NO abra el parte
   toggleVolcado(id);
 }
 
 function borrar(id){
-  confirmar('¿Borrar este parte? No se puede deshacer.', ()=>{
+  confirmar('¿Mover este parte a la papelera? Podrás restaurarlo después.', ()=>{
     const p = getParte(id);
     if(p){ p.borrado = true; guardar(p); }
     view={name:'list'}; render(); toast('Parte borrado');
@@ -873,6 +976,25 @@ function restaurar(id){
   const p = getParte(id);
   if(p){ p.borrado = false; guardar(p); }
   render(); toast('Parte restaurado');
+}
+
+function recuperarConflicto(id){
+  const c=conflictos.find(x=>x.id===id); if(!c || !c.datos) return;
+  if(c.tipo==='extras'){
+    const ids=new Set(extras.map(e=>e.id));
+    (c.datos.items||[]).forEach(e=>{ if(e&&e.id&&!ids.has(e.id)){ extras.push(e); ids.add(e.id); } });
+    saveExtras(); conflictos=conflictos.filter(x=>x.id!==id); saveConflictos(); render(); toast('Líneas locales de jornada recuperadas'); return;
+  }
+  const p=typeof structuredClone==='function' ? structuredClone(c.datos) : JSON.parse(JSON.stringify(c.datos));
+  const t=nowISO(); p.id=uid(); p.ps=(p.ps||'SIN PS')+' · COPIA LOCAL'; p.creado=t; p.actualizado=t; p.borrado=false; p.volcado=false;
+  partes.push(p); save(partes);
+  conflictos=conflictos.filter(x=>x.id!==id); saveConflictos();
+  render(); toast('Copia local recuperada como parte pendiente');
+}
+function descartarConflicto(id){
+  confirmar('¿Descartar esta copia local del conflicto?',()=>{
+    conflictos=conflictos.filter(x=>x.id!==id); saveConflictos(); render(); toast('Conflicto descartado');
+  },'Descartar');
 }
 
 /* ---------- copiar resumen completo del parte ---------- */
@@ -909,7 +1031,8 @@ function fallbackCopy(t,msg){
 
 /* ---------- exportar / importar copia de seguridad ---------- */
 function exportar(){
-  const blob = new Blob([JSON.stringify(partes,null,2)],{type:'application/json'});
+  const copia={version:2,exportado:nowISO(),partes,extras,conflictos};
+  const blob = new Blob([JSON.stringify(copia,null,2)],{type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'partes-' + new Date().toISOString().slice(0,10) + '.json';
@@ -923,11 +1046,19 @@ function importar(){
     const r=new FileReader();
     r.onload=()=>{
       try{
-        const data=JSON.parse(r.result);
-        if(!Array.isArray(data)) throw 0;
+        const raw=JSON.parse(r.result);
+        const data=Array.isArray(raw)?{partes:raw,extras:[]} : raw;
+        if(!data || !Array.isArray(data.partes) || !Array.isArray(data.extras||[])) throw 0;
         const ids=new Set(partes.map(p=>p.id));
-        data.forEach(p=>{ if(!ids.has(p.id)) partes.push(p); });
-        save(partes); render(); toast('Importado');
+        data.partes.forEach(p=>{
+          if(!p || typeof p!=='object' || !p.id) return;
+          const local=getParte(p.id);
+          if(!local){ partes.push(p); ids.add(p.id); }
+          else if((p.actualizado||'')>(local.actualizado||'')){ partes[partes.indexOf(local)]=p; }
+        });
+        const extraIds=new Set(extras.map(e=>e.id));
+        (data.extras||[]).forEach(e=>{ if(e&&e.id&&!extraIds.has(e.id)){ extras.push(e); extraIds.add(e.id); } });
+        save(partes); saveExtras(); render(); toast('Copia restaurada y combinada');
       }catch(e){ alert('Archivo no válido.'); }
     };
     r.readAsText(f);
@@ -952,8 +1083,8 @@ const API_URL = (location.hostname === 'localhost' || location.hostname === '127
 
 /* ---- Token: se guarda en ESTE dispositivo, nunca en el código ---- */
 const TOKEN_KEY = 'sync_token_v1';
-function getToken(){ return localStorage.getItem(TOKEN_KEY) || ''; }
-function setToken(t){ localStorage.setItem(TOKEN_KEY, t.trim()); }
+function getToken(){ return safeGet(TOKEN_KEY,'') || ''; }
+function setToken(t){ safeSet(TOKEN_KEY, t.trim()); }
 function hayToken(){ return getToken().length > 0; }
 /* añade la cabecera del token a cada llamada de sync */
 function authHeaders(extra){
@@ -965,20 +1096,30 @@ class ErrorAuth extends Error { constructor(){ super('No autorizado'); this.name
 /* marca de la última sincronización, para pedir solo lo nuevo la próxima vez */
 const SYNC_KEY = 'ultima_sync_v3';
 const SYNC_HORA_KEY = 'ultima_sync_hora_v1';
-function getUltimaSync(){ return localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00Z'; }
-function setUltimaSync(iso){ localStorage.setItem(SYNC_KEY, iso); }
+function getUltimaSync(){ return safeGet(SYNC_KEY,'1970-01-01T00:00:00Z') || '1970-01-01T00:00:00Z'; }
+function setUltimaSync(iso){ safeSet(SYNC_KEY, iso); }
+
+async function postRegistro(id, datos, actualizado, borrado=false){
+  const r = await fetch(API_URL + '/partes', {
+    method:'POST', headers:authHeaders({'Content-Type':'application/json'}),
+    body:JSON.stringify({id,datos,actualizado,borrado})
+  });
+  if(r.status===401) throw new ErrorAuth();
+  if(!r.ok) throw new Error('El servidor rechazó '+id);
+}
 
 /* SUBIR: manda cada parte local a la API (el servidor decide con last-write-wins) */
 async function subir(){
-  for(const p of partes){
-    const r = await fetch(API_URL + '/partes', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ id: p.id, datos: p, actualizado: p.actualizado, borrado: p.borrado })
-    });
-    if(r.status === 401) throw new ErrorAuth();
-    if(!r.ok) throw new Error('El servidor rechazó el parte ' + p.id);
-  }
+  for(const p of partes) await postRegistro(p.id,p,p.actualizado,p.borrado);
+  const actualizado=safeGet(EXTRAS_UPDATED_KEY) || nowISO();
+  await postRegistro(EXTRAS_SYNC_ID,{kind:'extras-v1',items:extras},actualizado,false);
+}
+
+function registrarConflicto(tipo, datos, remotoActualizado){
+  const huella=tipo+'|'+JSON.stringify(datos)+'|'+remotoActualizado;
+  if(conflictos.some(c=>c.huella===huella)) return;
+  conflictos.push({id:uid(),tipo,datos,remotoActualizado,detectado:nowISO(),huella});
+  saveConflictos();
 }
 /* BAJAR: trae del servidor lo cambiado desde la última sync y lo funde en local */
 async function bajar(){
@@ -993,10 +1134,37 @@ async function bajar(){
   if(r.status === 401) throw new ErrorAuth();
   if(!r.ok) throw new Error('El servidor no devolvió los cambios');
   const data = await r.json();
+  if(!data || !Array.isArray(data.partes)) throw new Error('Respuesta de sincronización no válida');
 
   let masReciente = marca;
+  const base=getBase();
   data.partes.forEach(remoto=>{
+    if(remoto.id===EXTRAS_SYNC_ID || (remoto.datos&&remoto.datos.kind==='extras-v1')){
+      const localActualizado=safeGet(EXTRAS_UPDATED_KEY,'1970-01-01T00:00:00Z');
+      const baseActualizado=base[EXTRAS_SYNC_ID];
+      const localCambio=!!baseActualizado && baseActualizado!==localActualizado;
+      const remotoCambio=!!baseActualizado && baseActualizado!==remoto.actualizado;
+      if(localCambio&&remotoCambio&&JSON.stringify(extras)!==JSON.stringify(remoto.datos.items||[])){
+        const copia=remoto.actualizado>localActualizado ? {items:extras} : {items:remoto.datos.items||[]};
+        registrarConflicto('extras',copia,remoto.actualizado);
+      }
+      if(remoto.actualizado>localActualizado){
+        extras=Array.isArray(remoto.datos.items)?remoto.datos.items:[];
+        saveExtras(false); safeSet(EXTRAS_UPDATED_KEY,remoto.actualizado);
+      }
+      if(remoto.recibido > masReciente) masReciente=remoto.recibido;
+      return;
+    }
     const local = getParte(remoto.id);
+    if(local){
+      const baseActualizado=base[remoto.id];
+      const localCambio=!!baseActualizado&&baseActualizado!==local.actualizado;
+      const remotoCambio=!!baseActualizado&&baseActualizado!==remoto.actualizado;
+      if(localCambio&&remotoCambio&&JSON.stringify(local)!==JSON.stringify(remoto.datos)){
+        const copia=remoto.actualizado>local.actualizado ? local : {...remoto.datos,id:remoto.id,actualizado:remoto.actualizado,borrado:remoto.borrado};
+        registrarConflicto('parte',copia,remoto.actualizado);
+      }
+    }
     if(!local || local.actualizado < remoto.actualizado){
       const fundido = { ...remoto.datos, id: remoto.id, actualizado: remoto.actualizado, borrado: remoto.borrado };
       if(local){ partes[partes.indexOf(local)] = fundido; }
@@ -1011,15 +1179,18 @@ async function bajar(){
 /* estado del sync, para el indicador */
 let syncEstado = 'idle';   // idle | sincronizando | ok | error
 
-/* SINCRONIZAR: sube y luego baja. "Sin cobertura" o "token malo" no rompen nada. */
+/* SINCRONIZAR: baja primero para detectar conflictos, sube y confirma el resultado. */
 async function sincronizar(){
   if(syncEstado === 'sincronizando') return;
   if(!hayToken()){ pedirToken(); return; }   // primera vez: pide el token
   syncEstado = 'sincronizando'; pintarSync();
   try{
+    await bajar();
     await subir();
     await bajar();
-    localStorage.setItem(SYNC_HORA_KEY, nowISO());
+    const base={}; partes.forEach(p=>base[p.id]=p.actualizado); base[EXTRAS_SYNC_ID]=safeGet(EXTRAS_UPDATED_KEY)||nowISO();
+    safeSet(BASE_KEY,JSON.stringify(base));
+    safeSet(SYNC_HORA_KEY, nowISO()); safeSet(DIRTY_KEY,'0');
     syncEstado = 'ok'; pintarSync();
     render();
     toast('Sincronizado');
@@ -1039,11 +1210,13 @@ async function sincronizar(){
 function pintarSync(){
   const el = document.getElementById('syncEstado');
   if(!el) return;
-  const ultima = localStorage.getItem(SYNC_HORA_KEY);
+  const ultima = safeGet(SYNC_HORA_KEY);
+  const dirty = safeGet(DIRTY_KEY)==='1';
   if(syncEstado === 'sincronizando'){ el.textContent = 'Sincronizando…'; el.className = 'sync-info'; }
   else if(syncEstado === 'error'){ el.textContent = 'Sin conexión'; el.className = 'sync-info err'; }
+  else if(dirty){ el.textContent = ultima ? 'Guardado en este dispositivo · cambios pendientes de sincronizar' : 'Guardado en este dispositivo · sin sincronizar'; el.className='sync-info dirty'; }
   else if(ultima){
-    const h = new Date(ultima).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+    const h = new Date(ultima).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     el.textContent = 'Sincronizado ' + h; el.className = 'sync-info ok';
   }
   else{ el.textContent = 'Sin sincronizar'; el.className = 'sync-info'; }
@@ -1069,6 +1242,7 @@ function pedirToken(){
   inp.onkeydown = (e)=>{ if(e.key==='Enter') guardarTk(); };
 }
 render();
+document.addEventListener('pointerdown',asegurarPersistencia,{once:true});
 </script>
 <script>
 if('serviceWorker' in navigator){

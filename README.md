@@ -42,8 +42,11 @@ sin perder ningún dato por el camino.
 - **Copiado por casilla**: cada campo se copia por separado para volcarlo rápido
   al sistema de gestión.
 - **100% sin conexión** e **instalable** como app (PWA).
+- **Copia de seguridad completa**: permite exportar y restaurar partes, líneas
+  de jornada y copias conservadas al detectar conflictos.
 - **Sincronización entre dispositivos**: los partes se guardan primero en local
   y, cuando hay red, se sincronizan con un backend propio protegido por token.
+  También se sincronizan la comida y la improductividad de la jornada.
 
 ## Arquitectura y decisiones técnicas
 
@@ -56,8 +59,9 @@ sea un extra, nunca un requisito.
   ni dependencias externas**, en un único `index.html`. Decisión deliberada para
   máxima robustez offline: nada que se caiga por una CDN. Sitio estático
   desplegado en GitHub Pages.
-- **PWA**: Web App Manifest + Service Worker con estrategia _cache-first_, para
-  que arranque al instante y funcione sin red. Instalable en móvil y escritorio.
+- **PWA**: Web App Manifest + Service Worker con navegación _network-first_ y
+  recursos estáticos _cache-first_. Las llamadas de API quedan fuera del caché.
+  Es instalable en móvil y escritorio.
 - **Persistencia local**: `localStorage`, con migración segura de claves
   (copiar-y-conservar en vez de renombrar, para no destruir datos guardados).
 - **Sincronización**: API propia en **Node.js + Express** sobre **PostgreSQL**.
@@ -66,7 +70,9 @@ sea un extra, nunca un requisito.
   mientras que la descarga **incremental** se filtra por la hora del **servidor**
   (`recibido`), monótona y a prueba de desfases de reloj entre dispositivos. Los
   borrados son **lógicos**, para que una baja en un dispositivo se propague al
-  resto y siga siendo reversible.
+  resto y siga siendo reversible. Si dos dispositivos modifican el mismo
+  registro desde la última sincronización, se conserva una copia local
+  recuperable antes de aplicar la versión más reciente.
 - **Seguridad**: acceso a la API protegido con **token** (`Authorization:
   Bearer`), comparado en tiempo constante con SHA-256 + `timingSafeEqual`. El
   token nunca vive en el código; se inyecta como variable de entorno en el
