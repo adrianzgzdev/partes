@@ -67,11 +67,13 @@
   }
   .btn:active{transform:translateY(1px)}
   .btn-primary{background:var(--amber);color:#fff;border-color:var(--amber-deep)}
+  .btn-activo{background:var(--amber-bg);color:var(--amber-deep);border-color:var(--amber-deep)}
   .btn-ghost{background:transparent;border-color:transparent;color:var(--ink-soft)}
   .btn-danger{color:#b3261e;border-color:#e7c3c0;background:#fbecea}
   .btn-block{width:100%}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-  .toolbar .btn{flex:1;min-width:130px}
+  .toolbar .btn{flex:1 1 auto;min-width:130px}
+  .toolbar .btn-icono{flex:0 0 auto;min-width:0;width:52px;padding:13px}
   /* ---- Cards ---- */
   .card{
     background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -88,6 +90,8 @@
     background:#fbecea;color:#b3261e;font-size:18px;cursor:pointer;
   }
   .card-del:active{background:#f6dbd7}
+  .card-restore{background:var(--green-bg);color:var(--green);border-left-color:#bfe3cd}
+  .card-restore:active{background:#d3ecdd}
   .card .body{flex:1;min-width:0}
   .card .ps{font-family:var(--mono);font-weight:700;font-size:15px}
   .card .desc{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -327,12 +331,17 @@ let extras = loadExtras();
 const META_MIN = 480; // 8 horas mínimas
 
 let view = {name:'list', id:null};
-/* filtro de la lista: recordar si el usuario oculta los volcados */
-const FILTRO_KEY = 'solo_pendientes_v1';
+/* dos filtros independientes de la lista */
+const FILTRO_KEY = 'solo_pendientes_v2';
 let soloPendientes = localStorage.getItem(FILTRO_KEY) === '1';
+let verBorradas = false;   // no se recuerda: la papelera es una consulta puntual
 function toggleFiltro(){
   soloPendientes = !soloPendientes;
   localStorage.setItem(FILTRO_KEY, soloPendientes ? '1' : '0');
+  renderList();
+}
+function toggleBorradas(){
+  verBorradas = !verBorradas;
   renderList();
 }
 
@@ -485,12 +494,16 @@ function renderList(){
       <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
       <button class="btn" onclick="verJornada()">Parte de trabajo</button>
       <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
-      <button class="btn" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
-      <button class="btn btn-ghost" style="flex:0 0 auto;min-width:0;width:48px;padding:13px" onclick="pedirToken()" title="Configurar token">⚙</button>
+      <button class="btn ${soloPendientes?'btn-activo':''}" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
+      <button class="btn btn-icono ${verBorradas?'btn-danger':''}" onclick="toggleBorradas()" title="${verBorradas?'Salir de la papelera':'Ver partes borrados'}">🗑</button>
+      <button class="btn btn-ghost btn-icono" onclick="pedirToken()" title="Configurar token">⚙</button>
     </div>
     <div id="syncEstado" class="sync-info"></div>`;
 
-  const vivos = partesVivos().filter(p=> !soloPendientes || !p.volcado);
+  let vivos;
+  if(verBorradas)             vivos = partes.filter(p=> p.borrado);
+  else if(soloPendientes)     vivos = partesVivos().filter(p=> !p.volcado);
+  else                        vivos = partesVivos();
   if(vivos.length === 0){
     html += `<div class="empty"><strong>Aún no hay partes</strong>
       Pulsa <b>Nuevo parte</b> al empezar una reparación y vas rellenando sobre la marcha, aunque no tengas cobertura.</div>`;
@@ -507,7 +520,9 @@ function renderList(){
           <span class="badge badge-tap ${p.volcado?'done':'pend'}" onclick="toggleEstadoLista(event,'${p.id}')" title="Tocar para cambiar estado">${p.volcado?'VOLCADO':'PENDIENTE'}</span>
           <span class="chev">›</span>
         </button>
-        <button class="card-del" onclick="borrar('${p.id}')" title="Borrar parte">🗑</button>
+        ${verBorradas
+          ? `<button class="card-del card-restore" onclick="restaurar('${p.id}')" title="Restaurar parte">↺</button>`
+          : `<button class="card-del" onclick="borrar('${p.id}')" title="Borrar parte">🗑</button>`}
       </div>`).join('');
   }
   app.innerHTML = html;
@@ -853,6 +868,11 @@ function borrar(id){
     if(p){ p.borrado = true; guardar(p); }
     view={name:'list'}; render(); toast('Parte borrado');
   });
+}
+function restaurar(id){
+  const p = getParte(id);
+  if(p){ p.borrado = false; guardar(p); }
+  render(); toast('Parte restaurado');
 }
 
 /* ---------- copiar resumen completo del parte ---------- */
