@@ -1,7 +1,7 @@
 /* Service worker de Pedido Servicios.
    Cachea la app para que arranque al instante y funcione sin conexión.
    Para publicar una actualización: sube la versión (v1 -> v2) y haz push. */
-const CACHE = 'pedido-servicios-v18';
+const CACHE = 'pedido-servicios-v19';
 const ASSETS = [
   './',
   './index.html',

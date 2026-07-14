@@ -621,7 +621,7 @@ function renderList(){
       <button class="btn" onclick="importar()">↑ Restaurar</button>
     </div>
     <div class="field" style="margin-bottom:14px">
-      <input id="buscarInput" type="text" placeholder="🔍 Buscar por Nº PS o serie…" value="${esc(busqueda)}" oninput="onBuscarInput(this)">
+      <input id="buscarInput" type="text" inputmode="numeric" placeholder="🔍 Buscar por Nº PS o serie…" value="${esc(busqueda)}" oninput="onBuscarInput(this)">
     </div>
     <div id="syncEstado" class="sync-info"></div>`;
 
