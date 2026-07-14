@@ -563,39 +563,26 @@ function render(){
 }
 
 /* ---------- Lista ---------- */
-function renderList(){
-  document.getElementById('topTitle').textContent = 'Pedido Servicios';
-  let html = `
-    <div class="toolbar">
-      <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
-      <button class="btn" onclick="verJornada()">Parte de trabajo</button>
-      <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
-      <button class="btn ${soloPendientes?'btn-activo':''}" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
-      <button class="btn btn-icono ${verBorradas?'btn-danger':''}" onclick="toggleBorradas()" title="${verBorradas?'Salir de la papelera':'Ver partes borrados'}">🗑</button>
-      <button class="btn btn-ghost btn-icono" onclick="pedirToken()" title="Configurar token">⚙</button>
-      <button class="btn" onclick="exportar()">↓ Copia</button>
-      <button class="btn" onclick="importar()">↑ Restaurar</button>
-    </div>
-    <div id="syncEstado" class="sync-info"></div>`;
-
-  if(conflictos.length){
-    html += `<div class="conflicts"><strong>⚠ ${conflictos.length} conflicto${conflictos.length===1?'':'s'} de sincronización</strong>
-      ${conflictos.map(c=>`<div class="conflict-row"><span>${c.tipo==='extras'?'Jornada (comida/improductividad)':esc((c.datos&&c.datos.ps)||'Parte sin PS')} · copia local de ${fmtFecha(c.detectado)}</span>
-        <button class="btn" onclick="recuperarConflicto('${c.id}')">Recuperar</button>
-        <button class="btn btn-ghost" onclick="descartarConflicto('${c.id}')">Descartar</button></div>`).join('')}
-    </div>`;
-  }
-
+let busqueda = '';   // texto del buscador; no se persiste, se resetea al recargar
+/* partes visibles según papelera/filtro/búsqueda por Nº PS o Nº serie */
+function listaFiltrada(){
   let vivos;
   if(verBorradas)             vivos = partes.filter(p=> p.borrado);
   else if(soloPendientes)     vivos = partesVivos().filter(p=> !p.volcado);
   else                        vivos = partesVivos();
+  const q = busqueda.trim().toLowerCase();
+  if(q) vivos = vivos.filter(p=> (p.ps||'').toLowerCase().includes(q) || (p.serie||'').toLowerCase().includes(q));
+  return vivos;
+}
+function cardsHTML(vivos){
   if(vivos.length === 0){
-    html += `<div class="empty"><strong>Aún no hay partes</strong>
-      Pulsa <b>Nuevo parte</b> al empezar una reparación y vas rellenando sobre la marcha, aunque no tengas cobertura.</div>`;
-  }else{
-    const ordenadas = [...vivos].sort((a,b)=> (a.volcado-b.volcado) || ((b.creado||'').localeCompare(a.creado||'')));
-    html += ordenadas.map(p=>`
+    return busqueda
+      ? `<div class="empty"><strong>Sin resultados</strong>Prueba con otro nº de PS o de serie.</div>`
+      : `<div class="empty"><strong>Aún no hay partes</strong>
+          Pulsa <b>Nuevo parte</b> al empezar una reparación y vas rellenando sobre la marcha, aunque no tengas cobertura.</div>`;
+  }
+  const ordenadas = [...vivos].sort((a,b)=> (a.volcado-b.volcado) || ((b.creado||'').localeCompare(a.creado||'')));
+  return ordenadas.map(p=>`
       <div class="card">
         <button class="card-tap" onclick="abrir('${p.id}')">
           <div class="body">
@@ -614,7 +601,39 @@ function renderList(){
           ? `<button class="card-del card-restore" onclick="restaurar('${p.id}')" title="Restaurar parte">↺</button>`
           : `<button class="card-del" onclick="borrar('${p.id}')" title="Borrar parte">🗑</button>`}
       </div>`).join('');
+}
+/* actualiza solo las tarjetas al teclear, sin repintar el buscador (conserva el foco/cursor) */
+function onBuscarInput(el){
+  busqueda = el.value;
+  document.getElementById('listaCards').innerHTML = cardsHTML(listaFiltrada());
+}
+function renderList(){
+  document.getElementById('topTitle').textContent = 'Pedido Servicios';
+  let html = `
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
+      <button class="btn" onclick="verJornada()">Parte de trabajo</button>
+      <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
+      <button class="btn ${soloPendientes?'btn-activo':''}" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
+      <button class="btn btn-icono ${verBorradas?'btn-danger':''}" onclick="toggleBorradas()" title="${verBorradas?'Salir de la papelera':'Ver partes borrados'}">🗑</button>
+      <button class="btn btn-ghost btn-icono" onclick="pedirToken()" title="Configurar token">⚙</button>
+      <button class="btn" onclick="exportar()">↓ Copia</button>
+      <button class="btn" onclick="importar()">↑ Restaurar</button>
+    </div>
+    <div class="field" style="margin-bottom:14px">
+      <input id="buscarInput" type="text" placeholder="🔍 Buscar por Nº PS o serie…" value="${esc(busqueda)}" oninput="onBuscarInput(this)">
+    </div>
+    <div id="syncEstado" class="sync-info"></div>`;
+
+  if(conflictos.length){
+    html += `<div class="conflicts"><strong>⚠ ${conflictos.length} conflicto${conflictos.length===1?'':'s'} de sincronización</strong>
+      ${conflictos.map(c=>`<div class="conflict-row"><span>${c.tipo==='extras'?'Jornada (comida/improductividad)':esc((c.datos&&c.datos.ps)||'Parte sin PS')} · copia local de ${fmtFecha(c.detectado)}</span>
+        <button class="btn" onclick="recuperarConflicto('${c.id}')">Recuperar</button>
+        <button class="btn btn-ghost" onclick="descartarConflicto('${c.id}')">Descartar</button></div>`).join('')}
+    </div>`;
   }
+
+  html += `<div id="listaCards">${cardsHTML(listaFiltrada())}</div>`;
   app.innerHTML = html;
   pintarSync();
 }
