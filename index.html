@@ -635,7 +635,7 @@ function segmentosDe(fecha){
       const a=aMin(h.ini), b=aMin(h.fin);
       if(a===null||b===null) return;
       let dur=b-a; if(dur<0) dur+=1440;
-      segs.push({ref:h, ps:p.ps, serie:p.serie, horasMaquina:p.horasMaquina, parteId:p.id, tipo:h.tipo, ini:normHora(h.ini), fin:normHora(h.fin), a, b, dur});
+      segs.push({ref:h, ps:p.ps, serie:p.serie, horasMaquina:p.horasMaquina, descripcion:p.descripcion, parteId:p.id, tipo:h.tipo, ini:normHora(h.ini), fin:normHora(h.fin), a, b, dur});
     });
   });
   extras.forEach(e=>{
@@ -709,7 +709,7 @@ function renderTimeline(){
           ? `<div class="desc-i"><input data-id="${s.ref.id}" value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="mayus(this);updDesc('${s.ref.id}',this.value)"></div>`
           : isC
             ? `<div class="ps">Comida</div>`
-            : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'} <span class="ps-go">›</span></div>
+            : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'}${s.descripcion?' · '+esc(s.descripcion):''} <span class="ps-go">›</span></div>
                ${(s.serie||s.horasMaquina)?`<div class="seg-meta">${s.serie?'Serie '+esc(s.serie):''}${(s.serie&&s.horasMaquina)?' · ':''}${s.horasMaquina?esc(s.horasMaquina)+' h':''}</div>`:''}`
         }
         <div class="times">
@@ -873,7 +873,7 @@ function renderProductos(p){
     <div class="rrow">
       <button class="del" tabindex="-1" onclick="delProd('${p.id}',${i})">×</button>
       <div class="prod-grid">
-        <div><label>Referencia / Nº</label><input class="mono" value="${esc(pr.ref)}" oninput="updProd('${p.id}',${i},'ref',this.value)"></div>
+        <div><div class="lbl-row"><label>Referencia / Nº</label><button class="copy-mini" tabindex="-1" onclick="copyProdRef('${p.id}',${i})">⧉</button></div><input class="mono" value="${esc(pr.ref)}" oninput="updProd('${p.id}',${i},'ref',this.value)"></div>
         <div><div class="lbl-row"><label>Descripción</label><button class="copy-mini" tabindex="-1" onclick="copyProdDesc('${p.id}',${i})">⧉</button></div><input value="${esc(pr.desc)}" oninput="mayus(this);updProd('${p.id}',${i},'desc',this.value)"></div>
         <div><label>Cant.</label><input class="mono" inputmode="decimal" value="${esc(pr.cant)}" oninput="updProd('${p.id}',${i},'cant',this.value)"></div>
       </div>
@@ -1051,6 +1051,7 @@ function copiar(id){
 /* ---------- copiar una casilla individual ---------- */
 function copyVal(id, msg){ const el=document.getElementById(id); copiarTexto(el ? el.value : '', msg || 'Copiado'); }
 function copyProdDesc(id,i){ const p=getParte(id); copiarTexto((p.productos[i]||{}).desc || '', 'Descripción copiada'); }
+function copyProdRef(id,i){ const p=getParte(id); copiarTexto((p.productos[i]||{}).ref || '', 'Referencia copiada'); }
 
 function copiarTexto(t, msg){
   msg = msg || 'Copiado';
