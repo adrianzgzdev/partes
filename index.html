@@ -104,6 +104,7 @@
   .badge.pend{background:var(--amber-bg);color:var(--amber-deep)}
   .badge.done{background:var(--green-bg);color:var(--green)}
   .badge.play{background:#eef0ec;color:#3a4048}
+  .badge.hd{background:#e7eef7;color:#2c5d92}
   .badge.proceso{background:var(--amber);color:#fff}
   .badge-tap{cursor:pointer;padding:8px 12px}
   .badge-tap:active{transform:scale(0.92)}
@@ -455,7 +456,7 @@ function nuevaParte(){
   const t = nowISO();
   return {
     id:uid(), creado:t, actualizado:t, borrado:false,
-    fecha:hoyISO(), volcado:false, procesoInicio:null,
+    fecha:hoyISO(), volcado:false, procesoInicio:null, procesoTipo:null,
     ps:'PS26/', serie:'', cliente:'', descripcion:'',
     horasMaquina:'', comentarioResolucion:'', comentarioDefecto:'',
     productos:[], horas:[]
@@ -600,9 +601,12 @@ function renderList(){
           <div class="body">
             <div class="ps">${esc(p.ps) || 'Sin nº PS'}</div>
             <div class="desc">${esc(p.descripcion) || '—'}</div>
-            <div class="meta">${esc(p.serie)?'Serie '+esc(p.serie)+' · ':''}${fmtFecha(p.creado)}${p.procesoInicio?' · en proceso desde '+fmtFecha(p.procesoInicio).split(' ')[1]:''}</div>
+            <div class="meta">${esc(p.serie)?'Serie '+esc(p.serie)+' · ':''}${fmtFecha(p.creado)}${p.procesoInicio?' · en '+(p.procesoTipo==='H.D'?'desplazamiento':'proceso')+' desde '+fmtFecha(p.procesoInicio).split(' ')[1]:''}</div>
           </div>
-          ${verBorradas ? '' : `<span class="badge badge-tap ${p.procesoInicio?'proceso':'play'}" onclick="toggleProcesoLista(event,'${p.id}')" title="${p.procesoInicio?'Finalizar':'Poner en proceso'}">${p.procesoInicio?'■':'▶'}</span>`}
+          ${verBorradas ? '' : (p.procesoInicio
+            ? `<span class="badge badge-tap proceso" onclick="toggleProcesoLista(event,'${p.id}')" title="Finalizar">■</span>`
+            : `<span class="badge badge-tap play" onclick="toggleProcesoLista(event,'${p.id}','H.F')" title="Poner en proceso">▶</span>
+               <span class="badge badge-tap hd" onclick="toggleProcesoLista(event,'${p.id}','H.D')" title="Iniciar desplazamiento">H.D</span>`)}
           <span class="badge badge-tap ${p.volcado?'done':'pend'}" onclick="toggleEstadoLista(event,'${p.id}')" title="Tocar para cambiar estado">${p.volcado?'VOLCADO':'PENDIENTE'}</span>
           <span class="chev">›</span>
         </button>
@@ -838,8 +842,11 @@ function renderForm(p){
 
     <div class="section">
       ${p.procesoInicio
-        ? `<button class="btn btn-block btn-activo" onclick="finalizarParte('${p.id}')">■ Finalizar (en proceso desde ${fmtFecha(p.procesoInicio)})</button>`
-        : `<button class="btn btn-block" onclick="ponerEnProceso('${p.id}')">▶ Poner en proceso</button>`}
+        ? `<button class="btn btn-block btn-activo" onclick="finalizarParte('${p.id}')">■ Finalizar ${p.procesoTipo==='H.D'?'desplazamiento':''} (en proceso desde ${fmtFecha(p.procesoInicio)})</button>`
+        : `<div style="display:flex;gap:10px">
+             <button class="btn" style="flex:1" onclick="ponerEnProceso('${p.id}','H.F')">▶ Poner en proceso</button>
+             <button class="btn" style="flex:1" onclick="ponerEnProceso('${p.id}','H.D')">🚐 Desplazamiento</button>
+           </div>`}
       <button class="btn btn-block ${p.volcado?'':'btn-primary'}" style="margin-top:10px" onclick="toggleVolcado('${p.id}')">
         ${p.volcado ? '↺ Marcar como pendiente' : '✓ Marcar como volcado'}
       </button>
@@ -973,31 +980,34 @@ function toggleEstadoLista(event, id){
   toggleVolcado(id);
 }
 
-/* cierra el cronómetro de un parte en proceso: añade la línea H.F con fecha/horas reales */
+/* cierra el cronómetro de un parte en proceso: añade la línea H.F/H.D con fecha/horas reales */
 function finalizarProceso(p){
   if(!p || !p.procesoInicio) return;
   const ini = new Date(p.procesoInicio), fin = new Date();
   const horaIni = horaDe(ini), horaFin = horaDe(fin);
-  p.horas.push({tipo:'H.F', fecha:fechaDe(ini), ini:horaIni, fin:horaFin, cant:horasDecimales(horaIni,horaFin)});
-  p.procesoInicio = null;
+  const tipo = p.procesoTipo === 'H.D' ? 'H.D' : 'H.F';
+  p.horas.push({tipo, fecha:fechaDe(ini), ini:horaIni, fin:horaFin, cant:horasDecimales(horaIni,horaFin)});
+  p.procesoInicio = null; p.procesoTipo = null;
   guardar(p);
 }
-/* solo un parte puede estar en proceso a la vez: al empezar uno, se finaliza el anterior */
-function ponerEnProceso(id){
+/* solo un parte puede estar en proceso a la vez: al empezar uno, se finaliza el anterior.
+   tipo: 'H.F' (trabajo, por defecto) o 'H.D' (desplazamiento) */
+function ponerEnProceso(id, tipo){
   const p = getParte(id); if(!p || p.procesoInicio) return;
   partesVivos().filter(x=>x.id!==id && x.procesoInicio).forEach(finalizarProceso);
   p.procesoInicio = nowISO();
-  guardar(p); render(); toast('Parte en proceso');
+  p.procesoTipo = tipo === 'H.D' ? 'H.D' : 'H.F';
+  guardar(p); render(); toast(p.procesoTipo==='H.D' ? 'Desplazamiento en proceso' : 'Parte en proceso');
 }
 function finalizarParte(id){
   const p = getParte(id); if(!p) return;
   finalizarProceso(p);
-  render(); toast('Parte finalizado — línea de horas añadida');
+  render(); toast('Finalizado — línea de horas añadida');
 }
-function toggleProcesoLista(event, id){
+function toggleProcesoLista(event, id, tipo){
   event.stopPropagation();   // que tocar el botón NO abra el parte
   const p = getParte(id); if(!p) return;
-  if(p.procesoInicio) finalizarParte(id); else ponerEnProceso(id);
+  if(p.procesoInicio) finalizarParte(id); else ponerEnProceso(id, tipo);
 }
 
 function borrar(id){
