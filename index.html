@@ -254,6 +254,11 @@
   .conflict-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed #e2c58a;font-size:13px}
   .conflict-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .conflict-row .btn{min-height:38px;padding:7px 10px;font-size:12px}
+  .avisos{background:#fff8e8;border:1px solid #edc879;border-radius:12px;padding:12px 14px;margin-bottom:14px}
+  .avisos strong{display:block;margin-bottom:8px;color:#7a4800}
+  .aviso-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed #e2c58a;font-size:13px}
+  .aviso-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .aviso-row .btn{min-height:38px;padding:7px 10px;font-size:12px}
 </style>
 </head>
 <body>
@@ -387,6 +392,7 @@ function saveConflictos(){ safeSet(CONFLICTS_KEY,JSON.stringify(conflictos)); }
 function getBase(){ const b=parseStored(BASE_KEY,{}); return b&&typeof b==='object'&&!Array.isArray(b)?b:{}; }
 
 const META_MIN = 480; // 8 horas mínimas
+const PROCESO_AVISO_HORAS = 4;   // aviso si algo lleva "en proceso" más de esto: probable olvido
 
 let view = {name:'list', id:null};
 /* dos filtros independientes de la lista */
@@ -415,6 +421,7 @@ function isoDe(fecha, hhmm){
   const [h,mi] = hhmm.split(':').map(Number);
   return new Date(y,mo-1,d,h,mi).toISOString();
 }
+function horasDesde(iso){ return (Date.now() - new Date(iso).getTime()) / 3600000; }
 function fmtFecha(iso){
   const d = new Date(iso);
   return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'}) + ' ' +
@@ -656,6 +663,24 @@ function renderList(){
       ${conflictos.map(c=>`<div class="conflict-row"><span>${c.tipo==='extras'?'Jornada (comida/improductividad)':esc((c.datos&&c.datos.ps)||'Parte sin PS')} · copia local de ${fmtFecha(c.detectado)}</span>
         <button class="btn" onclick="recuperarConflicto('${c.id}')">Recuperar</button>
         <button class="btn btn-ghost" onclick="descartarConflicto('${c.id}')">Descartar</button></div>`).join('')}
+    </div>`;
+  }
+
+  const avisos = [];
+  partesVivos().forEach(p=>{
+    if(p.procesoInicio && horasDesde(p.procesoInicio) >= PROCESO_AVISO_HORAS){
+      avisos.push({texto:`${esc(p.ps)||'Sin PS'} · ${p.procesoTipo==='H.D'?'desplazamiento':'proceso'} desde ${fmtFecha(p.procesoInicio)}`, onclick:`finalizarParte('${p.id}')`});
+    }
+  });
+  if(generico){
+    const inicioISO = isoDe(generico.fecha, generico.ini);
+    if(horasDesde(inicioISO) >= PROCESO_AVISO_HORAS){
+      avisos.push({texto:`Desplazamiento genérico desde ${fmtFecha(inicioISO)}`, onclick:`toggleDesplazamientoGenerico()`});
+    }
+  }
+  if(avisos.length){
+    html += `<div class="avisos"><strong>⏱ ¿Te olvidaste de finalizar?</strong>
+      ${avisos.map(a=>`<div class="aviso-row"><span>${a.texto}</span><button class="btn" onclick="${a.onclick}">Finalizar</button></div>`).join('')}
     </div>`;
   }
 
@@ -1359,6 +1384,13 @@ function pedirToken(){
 }
 render();
 document.addEventListener('pointerdown',asegurarPersistencia,{once:true});
+
+/* sync automática en momentos seguros: abrir la app, recuperar conexión, volver a primer plano.
+   Nunca mientras se teclea. Si no hay token aún, no hace nada (no interrumpe con el modal). */
+function autoSincronizar(){ if(hayToken()) sincronizar(); }
+autoSincronizar();
+window.addEventListener('online', autoSincronizar);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') autoSincronizar(); });
 </script>
 <script>
 if('serviceWorker' in navigator){
