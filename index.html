@@ -409,6 +409,12 @@ function nowISO(){ return new Date().toISOString(); }
 function fechaDe(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function horaDe(d){ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function hoyISO(){ return fechaDe(new Date()); }
+/* reconstruye un ISO datetime a partir de una fecha (YYYY-MM-DD) y una hora (HH:MM) sueltas */
+function isoDe(fecha, hhmm){
+  const [y,mo,d] = fecha.split('-').map(Number);
+  const [h,mi] = hhmm.split(':').map(Number);
+  return new Date(y,mo-1,d,h,mi).toISOString();
+}
 function fmtFecha(iso){
   const d = new Date(iso);
   return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'}) + ' ' +
@@ -539,6 +545,20 @@ function updDesc(id, valor){
   if(e){ e.desc = valor; saveExtras(); }
 }
 
+/* desplazamiento sin PS todavía conocida: vive en extras hasta que se imputa o se finaliza suelto */
+function desplazamientoGenerico(){ return extras.find(e=>e.tipo==='H.D' && !e.fin); }
+function toggleDesplazamientoGenerico(){
+  const activo = desplazamientoGenerico();
+  if(activo){
+    activo.fin = horaDe(new Date());
+    saveExtras(); render(); toast('Desplazamiento genérico registrado');
+  }else{
+    partesVivos().filter(x=>x.procesoInicio).forEach(finalizarProceso);
+    extras.push({id:uid(), fecha:hoyISO(), tipo:'H.D', desc:'', ini:horaDe(new Date()), fin:''});
+    saveExtras(); render(); toast('Desplazamiento en curso — crea el parte cuando sepas a qué PS va');
+  }
+}
+
 /* ---------- persistir el formulario en edición ---------- */
 function bind(el, parte, prop, upper){
   el.value = parte[prop] ?? '';
@@ -591,7 +611,10 @@ function cardsHTML(vivos){
             <div class="meta">${esc(p.serie)?'Serie '+esc(p.serie)+' · ':''}${fmtFecha(p.creado)}${p.procesoInicio?' · en '+(p.procesoTipo==='H.D'?'desplazamiento':'proceso')+' desde '+fmtFecha(p.procesoInicio).split(' ')[1]:''}</div>
           </div>
           ${verBorradas ? '' : (p.procesoInicio
-            ? `<span class="badge badge-tap proceso" onclick="toggleProcesoLista(event,'${p.id}')" title="Finalizar">■</span>`
+            ? (p.procesoTipo==='H.D'
+                ? `<span class="badge badge-tap play" onclick="cambiarProcesoLista(event,'${p.id}','H.F')" title="Poner en proceso">▶</span>`
+                : `<span class="badge badge-tap hd" onclick="cambiarProcesoLista(event,'${p.id}','H.D')" title="Iniciar desplazamiento">H.D</span>`)
+              + `<span class="badge badge-tap proceso" onclick="toggleProcesoLista(event,'${p.id}')" title="Finalizar">■</span>`
             : `<span class="badge badge-tap play" onclick="toggleProcesoLista(event,'${p.id}','H.F')" title="Poner en proceso">▶</span>
                <span class="badge badge-tap hd" onclick="toggleProcesoLista(event,'${p.id}','H.D')" title="Iniciar desplazamiento">H.D</span>`)}
           <span class="badge badge-tap ${p.volcado?'done':'pend'}" onclick="toggleEstadoLista(event,'${p.id}')" title="Tocar para cambiar estado">${p.volcado?'VOLCADO':'PENDIENTE'}</span>
@@ -609,9 +632,11 @@ function onBuscarInput(el){
 }
 function renderList(){
   document.getElementById('topTitle').textContent = 'Pedido Servicios';
+  const generico = desplazamientoGenerico();
   let html = `
     <div class="toolbar">
       <button class="btn btn-primary" onclick="crear()">+ Nuevo parte</button>
+      <button class="btn ${generico?'btn-activo':''}" onclick="toggleDesplazamientoGenerico()">${generico?'■ Finalizar desplazamiento':'🚐 Iniciar desplazamiento'}</button>
       <button class="btn" onclick="verJornada()">Parte de trabajo</button>
       <button class="btn" onclick="sincronizar()">↻ Sincronizar</button>
       <button class="btn ${soloPendientes?'btn-activo':''}" onclick="toggleFiltro()">${soloPendientes ? '👁 Ver todos' : '⛔ Solo pendientes'}</button>
@@ -623,6 +648,7 @@ function renderList(){
     <div class="field" style="margin-bottom:14px">
       <input id="buscarInput" type="text" inputmode="numeric" placeholder="🔍 Buscar por Nº PS o serie…" value="${esc(busqueda)}" oninput="onBuscarInput(this)">
     </div>
+    ${generico ? `<div class="sync-info dirty">🚐 En desplazamiento desde ${normHora(generico.ini)}</div>` : ''}
     <div id="syncEstado" class="sync-info"></div>`;
 
   if(conflictos.length){
@@ -663,7 +689,7 @@ function segmentosDe(fecha){
   });
   extras.forEach(e=>{
     if(e.fecha!==fecha) return;
-    const nombre = e.tipo==='H.I' ? (e.desc || 'Improductividad') : 'Comida';
+    const nombre = e.tipo==='H.I' ? (e.desc || 'Improductividad') : e.tipo==='H.D' ? (e.desc || 'Desplazamiento genérico') : 'Comida';
     const a=aMin(e.ini), b=aMin(e.fin);
     if(a===null||b===null){
       segs.push({ref:e, ps:nombre, tipo:e.tipo, ini:e.ini||'', fin:e.fin||'', a:99999, b:null, dur:0, incompleta:true});
@@ -722,17 +748,20 @@ function renderTimeline(){
   segs.forEach((s,idx)=>{
     const isC = s.tipo==='H.C';
     const isI = s.tipo==='H.I';
-    const esExtra = isC || isI;
+    const isD = s.tipo==='H.D' && !s.parteId;   // desplazamiento genérico (extra), no una línea de un parte
+    const esExtra = isC || isI || isD;
     const cls = s.tipo==='H.D'?'hd':(s.tipo==='H.F'?'hf':(isC?'hc':(isI?'hi':'')));
     const durTxt = s.incompleta ? '—' : `${(s.dur/60).toFixed(2).replace('.',',')} h`;
-    html += `<div class="seg${isC?' seg-c':''}${isI?' seg-i':''}">
+    html += `<div class="seg${isC?' seg-c':''}${(isI||isD)?' seg-i':''}">
       <span class="tipo ${cls}">${s.tipo}</span>
       <div class="info">
         ${isI
           ? `<div class="desc-i"><input data-id="${s.ref.id}" value="${esc(s.ref.desc||'')}" placeholder="¿Qué hiciste?" oninput="mayus(this);updDesc('${s.ref.id}',this.value)"></div>`
-          : isC
-            ? `<div class="ps">Comida</div>`
-            : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'}${s.descripcion?' · '+esc(s.descripcion):''} <span class="ps-go">›</span></div>
+          : isD
+            ? `<div class="desc-i"><input data-id="${s.ref.id}" value="${esc(s.ref.desc||'')}" placeholder="Desplazamiento genérico" oninput="mayus(this);updDesc('${s.ref.id}',this.value)"></div>`
+            : isC
+              ? `<div class="ps">Comida</div>`
+              : `<div class="ps ps-link" onclick="abrir('${s.parteId}')" title="Ir a este parte">${esc(s.ps)||'Sin PS'}${s.descripcion?' · '+esc(s.descripcion):''} <span class="ps-go">›</span></div>
                ${(s.serie||s.horasMaquina)?`<div class="seg-meta">${s.serie?'Serie '+esc(s.serie):''}${(s.serie&&s.horasMaquina)?' · ':''}${s.horasMaquina?esc(s.horasMaquina)+' h':''}</div>`:''}`
         }
         <div class="times">
@@ -932,6 +961,14 @@ function renderHoras(p){
    ============================================================ */
 function crear(){
   const p = nuevaParte();
+  const activo = desplazamientoGenerico();
+  if(activo){
+    p.procesoInicio = isoDe(activo.fecha, activo.ini);
+    p.procesoTipo = 'H.D';
+    extras = extras.filter(e=>e!==activo);
+    saveExtras();
+    toast('Desplazamiento genérico imputado a este parte');
+  }
   partes.push(p); save(partes);
   view = {name:'form', id:p.id}; render();
 }
@@ -1014,6 +1051,8 @@ function finalizarProceso(p){
 function ponerEnProceso(id, tipo){
   const p = getParte(id); if(!p || p.procesoInicio) return;
   partesVivos().filter(x=>x.id!==id && x.procesoInicio).forEach(finalizarProceso);
+  const generico = desplazamientoGenerico();
+  if(generico){ generico.fin = horaDe(new Date()); saveExtras(); }
   p.procesoInicio = nowISO();
   p.procesoTipo = tipo === 'H.D' ? 'H.D' : 'H.F';
   guardar(p); render(); toast(p.procesoTipo==='H.D' ? 'Desplazamiento en proceso' : 'Parte en proceso');
@@ -1027,6 +1066,18 @@ function toggleProcesoLista(event, id, tipo){
   event.stopPropagation();   // que tocar el botón NO abra el parte
   const p = getParte(id); if(!p) return;
   if(p.procesoInicio) finalizarParte(id); else ponerEnProceso(id, tipo);
+}
+/* cambia de tipo sin salir del proceso: cierra el tramo actual y arranca el otro tipo, mismo parte */
+function cambiarProceso(id, tipo){
+  const p = getParte(id); if(!p || !p.procesoInicio) return;
+  finalizarProceso(p);
+  p.procesoInicio = nowISO();
+  p.procesoTipo = tipo === 'H.D' ? 'H.D' : 'H.F';
+  guardar(p); render(); toast(p.procesoTipo==='H.D' ? 'Desplazamiento en proceso' : 'Parte en proceso');
+}
+function cambiarProcesoLista(event, id, tipo){
+  event.stopPropagation();
+  cambiarProceso(id, tipo);
 }
 
 function borrar(id){
