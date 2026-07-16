@@ -1279,6 +1279,7 @@ async function bajar(){
 
   let masReciente = marca;
   const base=getBase();
+  let baseCambiada = false;   // si esta bajada avanza la base, la persistimos ya (no esperar a que suba también)
   data.partes.forEach(remoto=>{
     if(remoto.id===EXTRAS_SYNC_ID || (remoto.datos&&remoto.datos.kind==='extras-v1')){
       const localActualizado=safeGet(EXTRAS_UPDATED_KEY,'1970-01-01T00:00:00Z');
@@ -1292,6 +1293,7 @@ async function bajar(){
       if(remoto.actualizado>localActualizado){
         extras=Array.isArray(remoto.datos.items)?remoto.datos.items:[];
         saveExtras(false); safeSet(EXTRAS_UPDATED_KEY,remoto.actualizado);
+        base[EXTRAS_SYNC_ID]=remoto.actualizado; baseCambiada=true;
       }
       if(remoto.recibido > masReciente) masReciente=remoto.recibido;
       return;
@@ -1310,11 +1312,13 @@ async function bajar(){
       const fundido = { ...remoto.datos, id: remoto.id, actualizado: remoto.actualizado, borrado: remoto.borrado };
       if(local){ partes[partes.indexOf(local)] = fundido; }
       else{ partes.push(fundido); }
+      base[remoto.id] = remoto.actualizado; baseCambiada = true;
     }
     if(remoto.recibido > masReciente) masReciente = remoto.recibido;
   });
 
   save(partes);
+  if(baseCambiada) safeSet(BASE_KEY, JSON.stringify(base));
   setUltimaSync(masReciente);
 }
 /* estado del sync, para el indicador */
