@@ -1256,8 +1256,16 @@ async function subir(){
   await postRegistro(EXTRAS_SYNC_ID,{kind:'extras-v1',items:extras},actualizado,false);
 }
 
+/* JSON.stringify normal depende del orden de las claves: el mismo objeto vuelve con
+   otro orden tras pasar por la columna JSONB de Postgres, y parecía "distinto" sin serlo.
+   Esta versión ordena las claves para comparar por contenido, no por orden de inserción. */
+function stableStringify(obj){
+  if(Array.isArray(obj)) return '['+obj.map(stableStringify).join(',')+']';
+  if(obj && typeof obj==='object') return '{'+Object.keys(obj).sort().map(k=>JSON.stringify(k)+':'+stableStringify(obj[k])).join(',')+'}';
+  return JSON.stringify(obj);
+}
 function registrarConflicto(tipo, datos, remotoActualizado){
-  const huella=tipo+'|'+JSON.stringify(datos)+'|'+remotoActualizado;
+  const huella=tipo+'|'+stableStringify(datos)+'|'+remotoActualizado;
   if(conflictos.some(c=>c.huella===huella)) return;
   conflictos.push({id:uid(),tipo,datos,remotoActualizado,detectado:nowISO(),huella});
   saveConflictos();
@@ -1286,7 +1294,7 @@ async function bajar(){
       const baseActualizado=base[EXTRAS_SYNC_ID];
       const localCambio=!!baseActualizado && baseActualizado!==localActualizado;
       const remotoCambio=!!baseActualizado && baseActualizado!==remoto.actualizado;
-      if(localCambio&&remotoCambio&&JSON.stringify(extras)!==JSON.stringify(remoto.datos.items||[])){
+      if(localCambio&&remotoCambio&&stableStringify(extras)!==stableStringify(remoto.datos.items||[])){
         const copia=remoto.actualizado>localActualizado ? {items:extras} : {items:remoto.datos.items||[]};
         registrarConflicto('extras',copia,remoto.actualizado);
       }
@@ -1303,7 +1311,7 @@ async function bajar(){
       const baseActualizado=base[remoto.id];
       const localCambio=!!baseActualizado&&baseActualizado!==local.actualizado;
       const remotoCambio=!!baseActualizado&&baseActualizado!==remoto.actualizado;
-      if(localCambio&&remotoCambio&&JSON.stringify(local)!==JSON.stringify(remoto.datos)){
+      if(localCambio&&remotoCambio&&stableStringify(local)!==stableStringify(remoto.datos)){
         const copia=remoto.actualizado>local.actualizado ? local : {...remoto.datos,id:remoto.id,actualizado:remoto.actualizado,borrado:remoto.borrado};
         registrarConflicto('parte',copia,remoto.actualizado);
       }
