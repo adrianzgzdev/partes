@@ -1396,13 +1396,6 @@ function pedirToken(){
 }
 render();
 document.addEventListener('pointerdown',asegurarPersistencia,{once:true});
-
-/* sync automática en momentos seguros: abrir la app, recuperar conexión, volver a primer plano.
-   Nunca mientras se teclea. Si no hay token aún, no hace nada (no interrumpe con el modal). */
-function autoSincronizar(){ if(hayToken()) sincronizar(); }
-autoSincronizar();
-window.addEventListener('online', autoSincronizar);
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') autoSincronizar(); });
 </script>
 <script>
 if('serviceWorker' in navigator){
